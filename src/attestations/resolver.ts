@@ -1,7 +1,7 @@
 // Attestation hash → displayable asset URL + name.
 //
 // Ported from the CollectableHashResolver tool (~/git/CollectableHashResolver).
-// Images are uploaded to the Polkadot Bulletin Chain (Paseo testnet) and
+// Images are uploaded to the Polkadot Bulletin Chain (Summit network) and
 // indexed by CID in `cid_map.json`. The 32-byte attestation hash from
 // native deterministically picks one image from the catalog:
 //
@@ -26,16 +26,16 @@
 // the image prefetch consume it via .then(), and a production version may
 // later need to verify the gateway / warm the cache.
 //
-// IPFS gateway: Paseo testnet's bulletin gateway. Images live there; the
+// IPFS gateway: Summit's Bulletin gateway. Images live there; the
 // URL goes straight into an <img> src. Gateway / CID failures surface as
 // image load errors in Stage.tsx (which counts them via __ASSET_FAILURES__
 // for the post-session flow.error event).
 
 import cidMap from './cid_map.json'
 
-/** Paseo Bulletin Chain v2 IPFS gateway. CIDs expire on testnet
+/** Summit Bulletin Chain IPFS gateway. Bulletin storage expires
  *  (~2 weeks); when that happens, re-upload via the resolver tool. */
-const IPFS_GATEWAY = 'https://paseo-bulletin-next-ipfs.polkadot.io/ipfs'
+const IPFS_GATEWAY = 'https://summit-ipfs.polkadot.io/ipfs'
 
 /** Rarity threshold over a uint16 space (0..65535). 6554/65536 ≈ 10%
  *  chance of a rare roll. Matches RARE_THRESHOLD in
