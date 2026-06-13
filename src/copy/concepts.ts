@@ -20,10 +20,8 @@ export const CONCEPTS = {
     title: 'Weekly prize draw',
     body: "Every week, members are automatically entered into a draw for CASH. If your ticket's drawn, you win. There's nothing to enter."
   },
-  cash: {
-    title: 'CASH',
-    body: "A spendable reward you win in prize draws. You don't need to claim it; anything you win is added automatically."
-  },
+  // (The CASH concept is now conveyed by the coin-deposit animation on the
+  // win result screen rather than a tooltip, so no `cash` entry here.)
   username: {
     title: 'Your username',
     body: "As a member you can drop the numbers from your temporary handle (byteboro.42 becomes byteboro), or pick a completely different name if you'd like. Either way, claim it in the Prizes chat."
