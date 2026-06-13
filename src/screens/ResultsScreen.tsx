@@ -21,8 +21,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import MemberCard from '../components/MemberCard'
+import InfoTip from '../components/InfoTip'
 import { haptic } from '../haptics/engine'
 import { prefersReducedMotion } from '../anim/easings'
+import { CONCEPTS } from '../copy/concepts'
 import type { GameOutcome } from '../bridge/types'
 
 interface ResultsScreenProps {
@@ -190,7 +192,12 @@ export default function ResultsScreen({ outcome, displayName, onContinue }: Resu
 
       <div className="results-summary" ref={summaryRef}>
         <div className="results-summary-headline">{summaryHeadline}</div>
-        <div className="results-summary-sub">{summarySub}</div>
+        <div className="results-summary-sub">
+          {summarySub}
+          {outcome.justBecameMember && (
+            <>{' '}<InfoTip title={CONCEPTS.membership.title} body={CONCEPTS.membership.body} label="What is membership?" /></>
+          )}
+        </div>
       </div>
 
       <button

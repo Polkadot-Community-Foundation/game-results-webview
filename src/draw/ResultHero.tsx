@@ -32,6 +32,8 @@ import { formatTicketLong } from './ticketDisplay'
 import { outcomeFor, type EffectiveDraw } from './types'
 import type { DrawAssets } from './assets'
 import ParticleCanvas, { type ParticleCanvasApi } from '../components/ParticleCanvas'
+import InfoTip from '../components/InfoTip'
+import { CONCEPTS } from '../copy/concepts'
 
 interface ResultHeroProps {
   draw: EffectiveDraw
@@ -389,6 +391,7 @@ export default function ResultHero({
       {outcome === 'win' ? (
         <div className="draw-result-credited">
           Enjoy your {formatPrize(draw.prizeUsd)}!
+          {' '}<InfoTip title={CONCEPTS.cash.title} body={CONCEPTS.cash.body} label="What is CASH?" />
         </div>
       ) : countdown ? (
         <div className="draw-result-countdown" aria-live="off">

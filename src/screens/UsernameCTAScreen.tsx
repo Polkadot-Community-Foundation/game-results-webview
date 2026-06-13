@@ -30,6 +30,8 @@ import { gsap } from 'gsap'
 import { sfx } from '../audio/engine'
 import { haptic } from '../haptics/engine'
 import { prefersReducedMotion } from '../anim/easings'
+import InfoTip from '../components/InfoTip'
+import { CONCEPTS } from '../copy/concepts'
 import type { UsernameAvailability } from '../bridge/types'
 
 interface UsernameCTAScreenProps {
@@ -254,6 +256,7 @@ function AvailableVariant({ stem, previousUsername, onNext }: AvailableProps) {
       </div>
       <div className="username-note" ref={noteRef}>
         You can claim your new username in the Prizes chat.
+        {' '}<InfoTip title={CONCEPTS.username.title} body={CONCEPTS.username.body} label="What's this username?" />
       </div>
       <button
         type="button"
@@ -363,6 +366,7 @@ function TakenVariant({ name, previousUsername, alternatives, onNext }: TakenPro
       )}
       <div className="username-note" ref={noteRef}>
         You can claim your new username in the Prizes chat.
+        {' '}<InfoTip title={CONCEPTS.username.title} body={CONCEPTS.username.body} label="What's this username?" />
       </div>
       <button
         type="button"
@@ -428,6 +432,7 @@ function CautiousVariant({ previousUsername, onNext }: CautiousProps) {
       </h1>
       <div className="username-note username-note-cautious" ref={noteRef}>
         You can claim your new username in the Prizes chat.
+        {' '}<InfoTip title={CONCEPTS.username.title} body={CONCEPTS.username.body} label="What's this username?" />
       </div>
       <button
         type="button"

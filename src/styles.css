@@ -5268,3 +5268,65 @@ body.is-embedded .phone-status-bar {
    in embedded mode it would also work but the radial gradient is
    tuned for the desktop centered-phone composition. Keep it for
    now — visually harmless inside the flattened frame. */
+
+/* ============================================================
+   Info "?" affordance + explanation card (consumer-concept tips).
+   Overlay is portaled into .phone-frame, so absolute inset:0 covers the
+   device viewport (clipped to the frame in preview, full-screen embedded).
+   ============================================================ */
+.infotip-trigger {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px;
+  margin-left: 7px;
+  border-radius: 50%;
+  font-family: var(--font-ui);
+  font-size: 10px; font-weight: 800; line-height: 1;
+  color: rgba(228, 230, 245, 0.82);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  vertical-align: text-bottom;
+}
+.infotip-trigger:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
+
+.infotip-overlay {
+  position: absolute; inset: 0;
+  z-index: 200;
+  display: grid; place-items: center;
+  padding: 28px;
+  background: rgba(8, 7, 18, 0.72);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  animation: infotipFade 0.2s ease-out;
+}
+.infotip-card {
+  width: 100%; max-width: 300px;
+  padding: 20px;
+  text-align: left;
+  background: rgba(24, 22, 46, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+  animation: infotipPop 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.infotip-title {
+  margin: 0 0 8px;
+  font-family: var(--font-title);
+  font-weight: 800; font-size: 16px;
+  color: #fff;
+}
+.infotip-body { margin: 0 0 16px; font-size: 14px; line-height: 1.5; color: rgba(228, 230, 245, 0.78); }
+.infotip-close {
+  width: 100%;
+  padding: 11px;
+  border-radius: 999px;
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  color: #fff;
+  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
+  box-shadow: 0 6px 18px var(--accent-glow);
+}
+.infotip-close:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@keyframes infotipFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes infotipPop { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .infotip-overlay, .infotip-card { animation: none !important; }
+}

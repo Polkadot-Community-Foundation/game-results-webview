@@ -13,6 +13,8 @@ import { gsap } from 'gsap'
 import { prefersReducedMotion } from '../anim/easings'
 import { formatTicketLong } from './ticketDisplay'
 import type { DrawAssets } from './assets'
+import InfoTip from '../components/InfoTip'
+import { CONCEPTS } from '../copy/concepts'
 
 interface SealedStageProps {
   /** The user's ticket hash — used to render the friendly code stamp. */
@@ -138,6 +140,7 @@ export default function SealedStage({
         <div className="draw-sealed-eyebrow">Weekly Member Draw</div>
         <div className="draw-sealed-sub">
           You're in this week's draw, with {winnerCount} winners
+          {' '}<InfoTip title={CONCEPTS.prizeDraw.title} body={CONCEPTS.prizeDraw.body} label="How does the prize draw work?" />
         </div>
       </div>
 
