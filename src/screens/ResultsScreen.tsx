@@ -122,7 +122,10 @@ export default function ResultsScreen({ outcome, displayName, onContinue }: Resu
   let summarySub: string
   if (passed) {
     if (outcome.justBecameMember) {
-      summaryHeadline = `Welcome, ${outcome.usernameClaim.previousUsername ?? 'member'}.`
+      // Greet with the user's display name — NOT previousUsername, which is
+      // the old auto-assigned candidate handle (e.g. "byteboro.42") they're
+      // leaving behind; greeting a brand-new member by it reads wrong.
+      summaryHeadline = `Welcome, ${displayName ?? 'member'}.`
       summarySub = hasPrizeDraw
         ? `Your first member prize draw is up next.`
         : `Membership unlocked.`

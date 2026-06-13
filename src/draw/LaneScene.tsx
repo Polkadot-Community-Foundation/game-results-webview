@@ -75,10 +75,18 @@ export default function LaneScene({ draw, assets, displayName, onComplete }: Lan
       const isUserSlot = userWinPos
         && pos.lane === userWinPos.lane
         && pos.y === userWinPos.y
+      let hash = isUserSlot ? draw.userTicket : (draw.winningTickets[i] ?? pseudoHash(i + 7000))
+      // On a loss, never light the user's OWN ticket code among the winners.
+      // `won` is authoritative (they didn't win), so showing their
+      // recognizable code in the gold cascade would contradict the verdict
+      // (e.g. won:false but userTicket happens to be in winningTickets).
+      if (!isUserSlot && outcome !== 'win' && hash === draw.userTicket) {
+        hash = pseudoHash(i + 9000)
+      }
       out.push({
         id: `winner-${i}`,
         kind: isUserSlot ? 'user-winner' : 'winner',
-        hash: isUserSlot ? draw.userTicket : draw.winningTickets[i] ?? pseudoHash(i + 7000),
+        hash,
         position: pos
       })
     }
@@ -197,6 +205,12 @@ export default function LaneScene({ draw, assets, displayName, onComplete }: Lan
     }
 
     const tl = gsap.timeline()
+    // The detach+lift tween (win OR loss) runs on the GLOBAL gsap, not on
+    // `tl` — its landing target is measured at runtime inside a timeline
+    // callback, so it can't be queued on the master timeline up front. That
+    // means `tl.kill()` alone wouldn't stop it; track it here and kill it in
+    // cleanup so it can't keep animating a detached element after unmount.
+    let liftTween: gsap.core.Tween | null = null
 
     // ── Stage in: tickets fade in around the user ────────────────────
     // Open close-up: camera already at the user's Y. Tickets near the
@@ -475,7 +489,7 @@ export default function LaneScene({ draw, assets, displayName, onComplete }: Lan
           // its target was unknown at timeline build; the master
           // timeline holds for `liftDuration` via the empty tween
           // below so subsequent timeline steps wait correctly.
-          gsap.to(userEl, {
+          liftTween = gsap.to(userEl, {
             x: 0,
             y: landingY,
             rotation: -90,
@@ -634,7 +648,7 @@ export default function LaneScene({ draw, assets, displayName, onComplete }: Lan
           // OUTER div matches the hero's filter target (drop-shadow
           // + saturate + brightness) for a continuous compositing
           // pipeline at the swap.
-          gsap.to(userEl, {
+          liftTween = gsap.to(userEl, {
             x: 0,
             y: landingY,
             rotation: -90 - 3,
@@ -661,7 +675,7 @@ export default function LaneScene({ draw, assets, displayName, onComplete }: Lan
       tl.add(() => onComplete(), igniteEnd + 0.45 + scrollDur + 0.35 + 1.2)
     }
 
-    return () => { tl.kill() }
+    return () => { tl.kill(); liftTween?.kill() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draw, outcome, winnerCount])
 

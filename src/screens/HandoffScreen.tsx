@@ -5,14 +5,20 @@
 // We deliberately do NOT declare failure here — a late-but-passing player
 // and a true failer are indistinguishable at this point — so we hand off to
 // the user's Pocket, where the collectibles land once the chain settles.
-// Terminal screen: its button fires flow.complete so native can dismiss.
+// Terminal screen: its button calls onDone (App fires flow.complete and
+// latches the dismissal so a late outcome can't route the user back).
 
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
-import { sendFlowEvent } from '../bridge/send'
 import { prefersReducedMotion } from '../anim/easings'
 
-export default function HandoffScreen() {
+interface HandoffScreenProps {
+  /** Called when the user dismisses the handoff. App fires flow.complete
+   *  and marks the handoff done so a late outcome won't re-enter the flow. */
+  onDone: () => void
+}
+
+export default function HandoffScreen({ onDone }: HandoffScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,10 +33,6 @@ export default function HandoffScreen() {
     )
   }, [])
 
-  function handleDone() {
-    sendFlowEvent({ type: 'flow.complete' })
-  }
-
   return (
     <div className="handoff-screen" ref={rootRef}>
       <div className="handoff-mark" aria-hidden="true">✦</div>
@@ -39,7 +41,7 @@ export default function HandoffScreen() {
         Your collectibles are still being secured — they'll show up in your
         Pocket shortly.
       </p>
-      <button type="button" className="handoff-cta" onClick={handleDone}>
+      <button type="button" className="handoff-cta" onClick={onDone}>
         Got it
       </button>
     </div>

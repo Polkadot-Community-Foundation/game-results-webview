@@ -11,9 +11,9 @@
 
 import type { RefObject } from 'react'
 import { useEffect } from 'react'
-import Stage from '../components/Stage'
+import Stage, { SHELF_SIZE } from '../components/Stage'
 import { sendFlowEvent } from '../bridge/send'
-import { bufferedAttestationCount } from '../bridge/attestations'
+import { onShelfAttestationCount } from '../bridge/attestations'
 
 interface NFTRevealScreenProps {
   frameRef: RefObject<HTMLDivElement>
@@ -24,8 +24,9 @@ interface NFTRevealScreenProps {
 
 export default function NFTRevealScreen({ frameRef, streamSettled, onContinue }: NFTRevealScreenProps) {
   useEffect(() => {
-    // count = attestations received so far (no known total upfront).
-    sendFlowEvent({ type: 'flow.nft_reveal_started', count: bufferedAttestationCount() })
+    // count = on-shelf attestations received so far (no known total upfront;
+    // off-shelf indices are dropped by the shelf, so they don't count here).
+    sendFlowEvent({ type: 'flow.nft_reveal_started', count: onShelfAttestationCount(SHELF_SIZE) })
   }, [])
 
   return (

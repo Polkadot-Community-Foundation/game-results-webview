@@ -11,7 +11,8 @@ import BootErrorScreen from './screens/BootErrorScreen'
 import ErrorBoundary from './components/ErrorBoundary'
 import { readInitialInput, subscribeInput } from './bridge/input'
 import { subscribeAvailability } from './bridge/availability'
-import { resetAttestations, subscribeAttestations, bufferedAttestationCount } from './bridge/attestations'
+import { resetAttestations, subscribeAttestations, onShelfAttestationCount } from './bridge/attestations'
+import { SHELF_SIZE } from './components/Stage'
 import { subscribeOutcome, readBufferedOutcome, resetOutcome } from './bridge/outcome'
 import { sendFlowEvent } from './bridge/send'
 import { fetchDisplayName } from './bridge/fetchName'
@@ -145,6 +146,10 @@ export default function App() {
   const hasFiredResultsShown = useRef(false)
   const hasFiredAvailabilityNeeded = useRef(false)
   const hasFiredAssetErrors = useRef(false)
+  const hasRequestedDisplayName = useRef(false)
+  // Latches once the user dismisses the terminal handoff (fires flow.complete)
+  // so a late outcome can't route them back into the flow after they've left.
+  const handoffDone = useRef(false)
 
   // Username availability — pushed independently via
   // window.setUsernameAvailability(...), or bundled in the outcome's
@@ -210,24 +215,46 @@ export default function App() {
     return off
   }, [])
 
-  // Resolve `streamSettled` while the reveal is up. A definitive FAIL
-  // outcome settles immediately (nothing more streams); otherwise we settle
-  // on a quiet gap (no new attestation for STALL_QUIET_MS), all 10 arriving,
-  // or an absolute cap. A PASS deliberately does NOT settle here — the pack
-  // keeps streaming up to 10 after the outcome fires at the 6th.
+  // How many ON-SHELF attestations to expect before the reveal can settle
+  // fast (without waiting out the quiet/cap timers). `attestations.total` is
+  // the count the user earned and native streams; clamp to the shelf (native
+  // may report more than render) and fall back to the full shelf when it's
+  // missing. Drives the settle gate below so an under-10 game fast-settles
+  // and a >10 game doesn't wait for arrivals the shelf will never show.
+  const expectedAttestations = useMemo(() => {
+    const t = input?.attestations.total
+    if (typeof t !== 'number' || !Number.isFinite(t) || t <= 0) return SHELF_SIZE
+    return Math.min(SHELF_SIZE, Math.floor(t))
+  }, [input?.attestations.total])
+
+  // A definitive FAIL outcome settles the reveal immediately — nothing more
+  // streams. (A PASS does NOT settle: native keeps streaming the pack up to
+  // SHELF_SIZE after firing the outcome at the 6th, so we wait for the rest.)
   useEffect(() => {
-    if (outcome && !outcome.passed) { setStreamSettled(true); return }
+    if (outcome && !outcome.passed) setStreamSettled(true)
+  }, [outcome])
+
+  // Settle the reveal once every expected on-shelf attestation has arrived,
+  // the stream goes quiet for STALL_QUIET_MS, or the absolute REVEAL_CAP_MS
+  // cap elapses. Deps are [screen, expectedAttestations] ONLY — deliberately
+  // NOT `outcome`: a PASS arriving mid-reveal must not tear this effect down
+  // and re-arm both timers (that restarted the "absolute" cap and the quiet
+  // window even though no new attestation had arrived). The quiet timer
+  // resets only on a real push. Counting is on-shelf (indices < SHELF_SIZE),
+  // so off-shelf pushes can't settle the reveal over an empty shelf.
+  useEffect(() => {
     if (screen !== 'nft_reveal') return
-    if (bufferedAttestationCount() >= 10) { setStreamSettled(true); return }
+    const settledEnough = () => onShelfAttestationCount(SHELF_SIZE) >= expectedAttestations
+    if (settledEnough()) { setStreamSettled(true); return }
     const cap = window.setTimeout(() => setStreamSettled(true), REVEAL_CAP_MS)
     let quiet = window.setTimeout(() => setStreamSettled(true), STALL_QUIET_MS)
     const off = subscribeAttestations(() => {
-      if (bufferedAttestationCount() >= 10) { setStreamSettled(true); return }
+      if (settledEnough()) { setStreamSettled(true); return }
       window.clearTimeout(quiet)
       quiet = window.setTimeout(() => setStreamSettled(true), STALL_QUIET_MS)
     })
     return () => { window.clearTimeout(cap); window.clearTimeout(quiet); off() }
-  }, [screen, outcome])
+  }, [screen, expectedAttestations])
 
   // Boot timeout — if input never arrives, transition to the error screen.
   useEffect(() => {
@@ -257,20 +284,23 @@ export default function App() {
     })
   }, [outcome, availability])
 
-  // If the initial input is missing the user's display name, ask native
-  // for it. Once it arrives we splice it into the member state.
+  // If the initial input is missing the user's display name, ask native for
+  // it ONCE (fetchDisplayName emits flow.request_display_name). Guarded by a
+  // ref so repeated setInput pushes that still lack a name don't re-fire the
+  // request on every input identity change. Once a name arrives we splice it
+  // in, but only if one hasn't already landed by another path.
   useEffect(() => {
     if (!input) return
     if (input.member.displayName) return
-    let cancelled = false
+    if (hasRequestedDisplayName.current) return
+    hasRequestedDisplayName.current = true
     fetchDisplayName().then((name) => {
-      if (cancelled || !name) return
-      setInput((prev) => prev
+      if (!name) return
+      setInput((prev) => prev && !prev.member.displayName
         ? { ...prev, member: { ...prev.member, displayName: name } }
         : prev)
     })
-    return () => { cancelled = true }
-  }, [input?.member.displayName, input])
+  }, [input])
 
   // Tag <body> when running inside a native WebView so CSS can flatten
   // the desktop-shaped phone-frame mockup into the viewport.
@@ -304,6 +334,20 @@ export default function App() {
     sendFlowEvent({ type: 'flow.results_shown' })
   }, [screen])
 
+  // Route out of the terminal handoff if the outcome resolves before the user
+  // dismisses it. The handoff ("still rolling in") is shown when the reveal
+  // finished with no outcome; a setGameOutcome landing a beat later (a
+  // 46s-vs-45s race against the 45s reveal cap) would otherwise be silently
+  // discarded — the user would exit never seeing the verdict / prize-draw /
+  // username ceremony. Once they tap "Got it" (handoffDone latched, flow.
+  // complete fired) we don't yank them back.
+  useEffect(() => {
+    if (screen !== 'handoff') return
+    if (!outcome) return
+    if (handoffDone.current) return
+    setScreen('results')
+  }, [screen, outcome])
+
   // Drive transitions.
   function advance(): void {
     if (!input) return
@@ -319,7 +363,9 @@ export default function App() {
     } else if (screen === 'username_cta') {
       setScreen('done')
     }
-    // 'handoff' is terminal (HandoffScreen fires flow.complete itself).
+    // 'handoff' is terminal — its CTA goes through handleHandoffDone (fires
+    // flow.complete). A late outcome can still route it out; see the effect
+    // above.
   }
 
   // Asset-error rollup: fired once if we entered 'done' with composite
@@ -352,6 +398,13 @@ export default function App() {
   }
 
   function handleBootClose(): void {
+    sendFlowEvent({ type: 'flow.complete' })
+  }
+
+  // Terminal handoff dismissal. Latches handoffDone BEFORE firing
+  // flow.complete so the route-out effect above can't re-enter the flow.
+  function handleHandoffDone(): void {
+    handoffDone.current = true
     sendFlowEvent({ type: 'flow.complete' })
   }
 
@@ -510,7 +563,7 @@ export default function App() {
           />
         )}
         {screen === 'handoff' && (
-          <HandoffScreen />
+          <HandoffScreen onDone={handleHandoffDone} />
         )}
         {screen === 'done' && (
           <DoneScreen />

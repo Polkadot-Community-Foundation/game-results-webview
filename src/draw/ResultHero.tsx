@@ -54,12 +54,20 @@ function formatPrize(amount: number): string {
 
 /** Derive the user's "Lucky #N of 20" position on win. Sorts the winners
  *  lexicographically and finds the user's slot. Doesn't matter what the
- *  sort order is — only matters that it's stable per-draw. */
+ *  sort order is — only matters that it's stable per-draw. Returns -1 when
+ *  the user's ticket ISN'T in the list (a won/winningTickets mismatch), so
+ *  the caller shows a bare "You won" instead of fabricating "#1 of N". */
 function deriveWinRank(userTicket: string, winningTickets: string[]): number {
   const sorted = [...winningTickets].sort()
   const idx = sorted.findIndex(t => t === userTicket)
-  return idx >= 0 ? idx + 1 : 1
+  return idx >= 0 ? idx + 1 : -1
 }
+
+// Once nextDrawAt is more than this far in the past we treat it as stale
+// schedule data (native didn't refresh it) and hide the row, rather than
+// showing "drawing now" indefinitely. A real draw "happening now" resolves
+// well within this window.
+const COUNTDOWN_STALE_GRACE_MS = 15 * 60_000
 
 function formatCountdown(targetIso: string): string {
   const target = new Date(targetIso).getTime()
@@ -68,6 +76,8 @@ function formatCountdown(targetIso: string): string {
   if (!Number.isFinite(target)) return ''
   const now = Date.now()
   const ms = target - now
+  // Stale (long past) → hide the row rather than say "drawing now" forever.
+  if (ms <= -COUNTDOWN_STALE_GRACE_MS) return ''
   if (ms <= 0) return 'drawing now'
   const totalSec = Math.floor(ms / 1000)
   const d = Math.floor(totalSec / 86400)
@@ -223,14 +233,15 @@ export default function ResultHero({
   let ctaLabel: string
   if (outcome === 'win') {
     headlineText = formatPrize(draw.prizeUsd)
-    // Only claim a placement when there's a real winner set to rank
-    // against — otherwise a bare "You won" (never "#1 of 0").
-    if (draw.winningTickets.length > 0) {
-      const rank = deriveWinRank(draw.userTicket, draw.winningTickets)
-      subText = `You won — lucky #${rank} of ${draw.winningTickets.length}`
-    } else {
-      subText = 'You won'
-    }
+    // Only claim a placement when there's a real winner set AND the user's
+    // ticket is actually in it — otherwise a bare "You won" (never "#1 of 0",
+    // and never a fabricated rank when won:true contradicts winningTickets).
+    const rank = draw.winningTickets.length > 0
+      ? deriveWinRank(draw.userTicket, draw.winningTickets)
+      : -1
+    subText = rank > 0
+      ? `You won — lucky #${rank} of ${draw.winningTickets.length}`
+      : 'You won'
     ctaLabel = `Claim my ${formatPrize(draw.prizeUsd)}`
   } else {
     // Single LOSS branch (lose-near and lose-far share copy). No
