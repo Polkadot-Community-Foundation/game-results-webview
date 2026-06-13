@@ -1020,6 +1020,36 @@ button:disabled { cursor: default; }
   transform: translateY(0);
 }
 
+/* First-arrival guidance on the shelf, before the first reveal. Shares the
+   SAME bottom slot as .action-label (they never show together: the hint is
+   'browsing'-only, the action-label 'revealing'-only), so the instruction
+   line lives in one consistent place across the flow. Bottom + safe-area is
+   robust on every device: it clears the home indicator and never collides
+   with the notch — unlike a top placement, where the shelf's flat 48px top
+   leaves no notch-clear strip on notched phones. The double text-shadow keeps
+   it legible over the (undimmed) shelf behind it. */
+.shelf-hint {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + max(40px, calc(54% - 266px)));
+  z-index: 18;
+  text-align: center;
+  padding: 0 32px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  color: rgba(235, 238, 250, 0.95);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7), 0 0 18px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+}
+.shelf-hint[data-visible="true"] {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 /* Invisible full-area hit target. Covers the card + surrounding shelf
    area so the user can tap anywhere to advance the reveal flow. */
 .tap-zone {
@@ -1113,7 +1143,9 @@ button:disabled { cursor: default; }
 .collect-all-button {
   position: absolute;
   right: 22px;
-  bottom: 16px;
+  /* Lift above the home indicator / gesture bar on devices that report a
+     bottom inset; floors at 16px where there's none. */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
   z-index: 22;
   padding: 9px 16px;
   border-radius: 10px 10px 26px 10px;
@@ -2827,7 +2859,10 @@ button:disabled { cursor: default; }
 /* ---------- Results screen ---------- */
 .results-screen {
   position: absolute; inset: 0; z-index: 60; /* verdict overlay above the shelf */
-  padding: 76px 22px 28px;
+  /* Bottom inset so the stacked content's Continue can't slide under the
+     home indicator on a tall celebration + short screen (matches the chest /
+     draw screens, which already pad for it). */
+  padding: 76px 22px calc(env(safe-area-inset-bottom, 0px) + 28px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -4112,7 +4147,8 @@ button:disabled { cursor: default; }
    block so they win the cascade for `position`. */
 .stage-continue {
   position: absolute;
-  bottom: 28px;
+  /* Clear the home indicator / gesture bar (floors at 28px). */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 30;
@@ -5091,6 +5127,18 @@ button:disabled { cursor: default; }
   font-variant-numeric: tabular-nums;
   color: #1f0604;
   opacity: 0.92;
+}
+
+.draw-result-credited {
+  /* margin-top:auto bottom-aligns it just above the CTA (same slot the
+     countdown used), keeping it clear of the lifted hero ticket above. */
+  max-width: 280px;
+  margin: auto auto 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(220, 215, 255, 0.72);
+  z-index: 3;
 }
 
 .draw-result-countdown {

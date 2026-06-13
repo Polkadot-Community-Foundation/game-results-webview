@@ -38,7 +38,7 @@ export default function HandoffScreen({ onDone }: HandoffScreenProps) {
       <div className="handoff-mark" aria-hidden="true">✦</div>
       <h1 className="handoff-headline">Still rolling in.</h1>
       <p className="handoff-sub">
-        Your collectibles are still being secured — they'll show up in your
+        Your collectibles are still being secured. They'll show up in your
         Pocket shortly.
       </p>
       <button type="button" className="handoff-cta" onClick={onDone}>

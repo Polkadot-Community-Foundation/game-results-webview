@@ -404,17 +404,20 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
   // fast-forward the rest. This gives each reveal its own moment of
   // anticipation and respects the user's pace.
   //
-  // Phase progression is DECOUPLED from the orb's visual animation.
-  // R3F's reconciler mounts the orb mesh asynchronously, with timing
-  // that varies between desktop and mobile browsers. The phase timer
-  // below ALWAYS advances 'enter' → 'ready' after the spawn
-  // duration; the visual spawn fires precisely when OrbScene's
-  // onOrbReady callback runs (no polling, no race). Together this
-  // makes tap-and-hold reliable on desktop AND mobile.
+  // The orb becomes tappable ('ready') once it has VISUALLY ARRIVED — not
+  // after a fixed gate measured from when this effect ran. R3F mounts the
+  // mesh asynchronously (timing varies by device) and the visual spawn only
+  // starts when OrbScene's onOrbReady fires, so we anchor 'ready' to the
+  // spawn START plus the orb's opacity-in (~0.4s in revealSpawn): tappable
+  // exactly as the orb finishes lighting up. A separate cap fires 'ready'
+  // anyway if the mesh never mounts, so the user can't get stuck on a dead
+  // 'enter' phase. (The old flat 600ms-from-effect-start gate left the lit
+  // orb un-tappable for a beat, and could even open before the orb appeared
+  // on a slow mount.)
 
-  // Stash the latest spawn invocation per-slot so OrbScene's
-  // onOrbReady callback (declared in JSX, can't capture changing
-  // closures cleanly) can trigger it without re-binding.
+  // Stash the latest spawn invocation per-slot so OrbScene's onOrbReady
+  // callback (declared in JSX, can't capture changing closures cleanly) can
+  // trigger it without re-binding.
   const pendingSpawnRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -425,41 +428,51 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     if (!api) return
 
     const reduced = prefersReducedMotion()
-    const SPAWN_DURATION_MS = reduced ? 0 : 600
+    // Spawn-start → tappable. Matches revealSpawn's opacity-in (0.4s) so the
+    // gate opens as the orb lights up, not a beat after it's already settled.
+    const READY_AFTER_SPAWN_MS = reduced ? 0 : 420
+    // Fallback so a never-mounting mesh can't strand us on 'enter'.
+    const SPAWN_CAP_MS = reduced ? 0 : 900
 
-    // 1. Phase-progression timer — fires regardless of orb-mesh state.
-    const phaseTimer = window.setTimeout(() => {
-      setPhase('ready')
-    }, SPAWN_DURATION_MS)
-
-    // 2. Visual spawn — runs immediately if the orb mesh is already
-    //    mounted; otherwise armed for OrbScene's onOrbReady callback
-    //    to call it as soon as the mesh commits to the scene.
-    let visualTl: gsap.core.Timeline | null = null
     let cancelled = false
+    let visualTl: gsap.core.Timeline | null = null
+    let readyTimer: number | undefined
+    let advanced = false
+    const advanceToReady = (): void => {
+      if (cancelled || advanced) return
+      advanced = true
+      setPhase('ready')
+    }
 
+    // Cap (fallback) — fires regardless of orb-mesh state.
+    const capTimer = window.setTimeout(advanceToReady, SPAWN_CAP_MS)
+
+    // Visual spawn — runs immediately if the orb mesh is already mounted;
+    // otherwise armed for onOrbReady to call as soon as the mesh commits.
     const runVisualSpawn = (): void => {
-      if (cancelled) return
-      if (visualTl) return  // already ran (e.g., called twice)
+      if (cancelled || visualTl) return  // already ran (e.g., called twice)
       const frameEl = frameRef.current
       if (!frameEl) return
       const stageRect = frameEl.getBoundingClientRect()
       visualTl = revealSpawn(api, particleRef.current, stageRect, { reduced })
+      // Open the tap gate once the orb has visually arrived. Anchored to the
+      // spawn START (here), so it can never open before the orb is on screen.
+      readyTimer = window.setTimeout(advanceToReady, READY_AFTER_SPAWN_MS)
     }
 
     if (api.orb()) {
-      // Mesh already mounted (e.g., OrbScene was reused or a
-      // re-render after a prior reveal). Spawn immediately.
+      // Mesh already mounted (OrbScene reused / re-render after a prior
+      // reveal). Spawn immediately.
       runVisualSpawn()
     } else {
-      // Arm — onOrbReady (passed down to OrbScene) will fire this
-      // the instant R3F commits the mesh.
+      // Arm — onOrbReady fires this the instant R3F commits the mesh.
       pendingSpawnRef.current = runVisualSpawn
     }
 
     return () => {
       cancelled = true
-      window.clearTimeout(phaseTimer)
+      window.clearTimeout(capTimer)
+      if (readyTimer !== undefined) window.clearTimeout(readyTimer)
       pendingSpawnRef.current = null
       visualTl?.kill()
     }
@@ -994,6 +1007,15 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     phase === 'revealed' ||
     phase === 'storing'
 
+  // First-arrival guidance: when the user lands on the shelf with tappable
+  // silhouettes but hasn't revealed anything yet, tell them what to do. Hides
+  // the moment they reveal their first card (or auto-collect takes over).
+  const showShelfHint =
+    seqPhase === 'browsing' &&
+    !collectAllActive &&
+    revealedCount === 0 &&
+    readySlots.size > 0
+
   return (
     <>
       <div className="bg-breath" aria-hidden="true" />
@@ -1093,6 +1115,14 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
           />
         )}
 
+        <div
+          className="shelf-hint"
+          data-visible={showShelfHint ? 'true' : 'false'}
+          aria-hidden={!showShelfHint}
+        >
+          Tap a collectible to reveal it
+        </div>
+
         <ActionLabel mode={buttonMode} />
 
         <div
@@ -1101,7 +1131,9 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
           data-viewing={seqPhase === 'viewing' ? 'true' : 'false'}
           aria-hidden={!finaleVisible}
         >
-          Collection complete!
+          {/* "Collection complete!" only when the full 10-slot shelf was
+              earned; a partial haul gets a non-overclaiming line. */}
+          {revealedCount >= SHELF_SIZE ? 'Collection complete!' : 'All collected!'}
         </div>
 
         {continueVisible && seqPhase !== 'viewing' && onComplete && (
@@ -1131,7 +1163,7 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
             {streamSettled ? "That's the round." : "Still securing your collectibles."}
           </div>
           <div className="stage-stuck-sub">
-            {streamSettled ? "Continue when you're ready." : "Hang tight — or continue and check your Pocket."}
+            {streamSettled ? "Continue when you're ready." : "Hang tight, or continue and check your Pocket."}
           </div>
           <button
             type="button"

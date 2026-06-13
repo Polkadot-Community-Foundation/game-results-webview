@@ -240,9 +240,12 @@ export default function ResultHero({
       ? deriveWinRank(draw.userTicket, draw.winningTickets)
       : -1
     subText = rank > 0
-      ? `You won — lucky #${rank} of ${draw.winningTickets.length}`
+      ? `You won, lucky #${rank} of ${draw.winningTickets.length}`
       : 'You won'
-    ctaLabel = `Claim my ${formatPrize(draw.prizeUsd)}`
+    // CASH is credited automatically by native — the user does nothing to
+    // claim it. So the CTA just continues the flow; saying "Claim my X CASH"
+    // would imply tapping is what pays them, which is false.
+    ctaLabel = 'Continue'
   } else {
     // Single LOSS branch (lose-near and lose-far share copy). No
     // distance language — ticketDistance is currently webview-simulated
@@ -378,11 +381,20 @@ export default function ResultHero({
         </>
       )}
 
-      {countdown && (
+      {/* Bottom note, just above the CTA:
+          - WIN: confirm the CASH is already theirs (auto-credited by native).
+            No countdown here — they just won; next-draw timing is secondary,
+            and this slot keeps the note clear of the lifted hero ticket.
+          - LOSS: the next-draw countdown, the one forward-looking detail. */}
+      {outcome === 'win' ? (
+        <div className="draw-result-credited">
+          Enjoy your {formatPrize(draw.prizeUsd)}!
+        </div>
+      ) : countdown ? (
         <div className="draw-result-countdown" aria-live="off">
           Next draw in <span className="draw-result-countdown-value">{countdown}</span>
         </div>
-      )}
+      ) : null}
 
       <button
         type="button"

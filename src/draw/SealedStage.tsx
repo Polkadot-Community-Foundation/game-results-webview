@@ -137,7 +137,7 @@ export default function SealedStage({
       <div className="draw-sealed-header">
         <div className="draw-sealed-eyebrow">Weekly Member Draw</div>
         <div className="draw-sealed-sub">
-          {winnerCount} winners
+          You're in this week's draw, with {winnerCount} winners
         </div>
       </div>
 
