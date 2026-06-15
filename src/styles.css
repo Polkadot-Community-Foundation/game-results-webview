@@ -2797,6 +2797,51 @@ button:disabled { cursor: default; }
   50%      { opacity: 1; transform: scale(1.08); }
 }
 
+/* ---------- Awaiting verdict ----------
+   Calm "tallying results" hold after the reveal while the outcome lands. */
+.await-screen {
+  position: absolute; inset: 0;
+  display: grid; place-items: center; align-content: center;
+  gap: 14px;
+  padding: 32px;
+  text-align: center;
+}
+.await-mark {
+  font-size: 40px;
+  color: var(--accent-bright);
+  text-shadow: 0 0 22px var(--accent-glow);
+  animation: awaitSpin 1.4s linear infinite;
+}
+.await-headline {
+  font-family: var(--font-title);
+  font-weight: 800;
+  font-size: 19px;
+  color: #fff;
+}
+.await-sub {
+  font-family: var(--font-ui);
+  font-size: 13px; line-height: 1.4;
+  color: rgba(220, 215, 255, 0.55);
+  max-width: 260px;
+}
+.await-skip {
+  margin-top: 10px;
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+  color: rgba(228, 230, 245, 0.85);
+  padding: 11px 22px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  animation: fadeUpIn 0.4s ease-out;
+}
+.await-skip:active { transform: scale(0.97); }
+.await-skip:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
+@keyframes awaitSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .await-mark { animation: none; }
+}
+
 /* ---------- Boot error ----------
    Reached only when input never arrives within BOOT_TIMEOUT_MS. Two
    user-controlled escapes (retry / close) plus the silent flow.error
@@ -3817,6 +3862,48 @@ button:disabled { cursor: default; }
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .done-cta:active { transform: scale(0.96); }
+
+/* ---------- Done: prize-draw win celebration ---------- */
+.done-screen.is-celebrate .done-headline {
+  font-size: 40px;
+  background: linear-gradient(180deg, #fff5d8 0%, #f6c869 52%, #e0a23a 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  /* Ongoing euphoric glow. drop-shadow (not text-shadow) so it shows through
+     the background-clipped text. GSAP only touches transform, so no clash. */
+  animation: doneGlow 2.2s ease-in-out infinite;
+}
+@keyframes doneGlow {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(246, 200, 105, 0.35)); }
+  50%      { filter: drop-shadow(0 0 20px rgba(246, 200, 105, 0.65)); }
+}
+.done-sub {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  color: rgba(230, 226, 250, 0.78);
+  margin-top: -14px;
+}
+.done-burst {
+  position: absolute;
+  top: 42%; left: 50%;
+  width: 0; height: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+.done-burst-dot {
+  position: absolute;
+  top: 0; left: 0;
+  width: 8px; height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #fff6d6 0%, #f6c869 60%, #d29539 100%);
+  box-shadow: 0 0 8px rgba(246, 200, 105, 0.8);
+  will-change: transform, opacity;
+}
+@media (prefers-reduced-motion: reduce) {
+  .done-screen.is-celebrate .done-headline { animation: none; }
+}
 
 /* Handoff screen — shown when the reveal finishes but the outcome never
    resolved in the foreground (stream stalled). Reassuring, not a verdict. */

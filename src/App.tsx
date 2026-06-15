@@ -6,6 +6,7 @@ import PrizeDrawScreen from './screens/PrizeDrawScreen'
 import NFTRevealScreen from './screens/NFTRevealScreen'
 import UsernameCTAScreen from './screens/UsernameCTAScreen'
 import HandoffScreen from './screens/HandoffScreen'
+import AwaitingVerdictScreen from './screens/AwaitingVerdictScreen'
 import DoneScreen from './screens/DoneScreen'
 import BootErrorScreen from './screens/BootErrorScreen'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -50,9 +51,17 @@ const BOOT_TIMEOUT_MS = 30_000
 const STALL_QUIET_MS = 9_000
 const REVEAL_CAP_MS = 45_000
 
+// After the reveal, if the outcome hasn't resolved we wait on the
+// awaiting-verdict screen rather than dropping straight to the Pocket handoff.
+// Collectibles arrive fast now, so a quiet reveal just means "verdict still
+// landing", not "give up". Only after this (deliberately long) wait do we fall
+// back to the handoff; a manual "Check your Pocket" escape appears sooner (see
+// AwaitingVerdictScreen) so an impatient user is never trapped.
+const AWAIT_VERDICT_TIMEOUT_MS = 120_000
+
 type Screen =
   | 'boot' | 'boot_error' | 'chest' | 'nft_reveal' | 'results'
-  | 'prize_draw' | 'username_cta' | 'handoff' | 'done'
+  | 'prize_draw' | 'username_cta' | 'awaiting_verdict' | 'handoff' | 'done'
 
 // The collectibles reveal is the FIRST beat (after the chest) so it can
 // absorb the time while attestations stream in. The outcome — pass/fail and
@@ -77,19 +86,23 @@ function synthOutcome(input: GameResultsInput): GameOutcome | null {
   }
 }
 
-// After the reveal: go to the verdict if the outcome resolved, else hand off
-// ("collectibles still arriving — see your Pocket").
+// After the reveal: the verdict if the outcome resolved, else WAIT for it on
+// the awaiting-verdict screen (which only falls back to the Pocket handoff
+// after a long wait).
 function nextAfterReveal(outcome: GameOutcome | null): Screen {
-  return outcome ? 'results' : 'handoff'
+  return outcome ? 'results' : 'awaiting_verdict'
 }
 function nextAfterVerdict(outcome: GameOutcome | null): Screen {
-  // Prize draw is members-only + pass-gated; then the username CTA (new
-  // members), else Done.
+  // New members claim their username RIGHT AFTER the membership-unlocked
+  // verdict; the prize draw (if any) comes after that. Everyone else with a
+  // pass + prize draw goes straight to the draw; otherwise Done.
+  if (outcome?.usernameClaim.eligible) return 'username_cta'
   if (outcome?.passed && outcome.prizeDraw) return 'prize_draw'
-  return outcome?.usernameClaim.eligible ? 'username_cta' : 'done'
+  return 'done'
 }
-function nextAfterPrizeDraw(outcome: GameOutcome | null): Screen {
-  return outcome?.usernameClaim.eligible ? 'username_cta' : 'done'
+function nextAfterUsername(outcome: GameOutcome | null): Screen {
+  // The prize draw follows the username claim for new members.
+  return outcome?.passed && outcome.prizeDraw ? 'prize_draw' : 'done'
 }
 
 // Dev panel is visible ONLY when the URL has `?dev=1` — regardless of
@@ -334,8 +347,19 @@ export default function App() {
     sendFlowEvent({ type: 'flow.results_shown' })
   }, [screen])
 
+  // Awaiting-verdict: after the reveal with no resolved outcome, hold on the
+  // "tallying results" screen. Route to the verdict the instant it lands; only
+  // after a long wait auto-fall-back to the Pocket handoff. (The screen also
+  // offers a manual "Check your Pocket" escape → handoff, see its onSkip.)
+  useEffect(() => {
+    if (screen !== 'awaiting_verdict') return
+    if (outcome) { setScreen('results'); return }
+    const t = window.setTimeout(() => setScreen('handoff'), AWAIT_VERDICT_TIMEOUT_MS)
+    return () => window.clearTimeout(t)
+  }, [screen, outcome])
+
   // Route out of the terminal handoff if the outcome resolves before the user
-  // dismisses it. The handoff ("still rolling in") is shown when the reveal
+  // dismisses it. The handoff is the long-wait fallback when the reveal
   // finished with no outcome; a setGameOutcome landing a beat later (a
   // 46s-vs-45s race against the 45s reveal cap) would otherwise be silently
   // discarded — the user would exit never seeing the verdict / prize-draw /
@@ -358,9 +382,11 @@ export default function App() {
       setScreen(nextAfterReveal(outcome))
     } else if (screen === 'results') {
       setScreen(nextAfterVerdict(outcome))
-    } else if (screen === 'prize_draw') {
-      setScreen(nextAfterPrizeDraw(outcome))
     } else if (screen === 'username_cta') {
+      setScreen(nextAfterUsername(outcome))
+    } else if (screen === 'prize_draw') {
+      // Username already happened before the draw (new members), so the draw
+      // is terminal here.
       setScreen('done')
     }
     // 'handoff' is terminal — its CTA goes through handleHandoffDone (fires
@@ -538,6 +564,7 @@ export default function App() {
           <ResultsScreen
             outcome={outcome}
             {...(userName ? { displayName: userName } : {})}
+            collectedCount={onShelfAttestationCount(SHELF_SIZE)}
             onContinue={advance}
           />
         )}
@@ -562,11 +589,14 @@ export default function App() {
             onContinue={advance}
           />
         )}
+        {screen === 'awaiting_verdict' && (
+          <AwaitingVerdictScreen onSkip={() => setScreen('handoff')} />
+        )}
         {screen === 'handoff' && (
           <HandoffScreen onDone={handleHandoffDone} />
         )}
         {screen === 'done' && (
-          <DoneScreen />
+          <DoneScreen won={!!outcome?.prizeDraw?.won} />
         )}
         </ErrorBoundary>
       </PhoneFrame>

@@ -17,9 +17,13 @@
 //
 //   - undefined | 'unknown' → CAUTIOUS GENERIC. We don't know if the
 //     base name is free, so we don't celebrate the claimable name.
-//     Greets with the user's current handle ("Welcome, <previousUsername>.")
-//     Claiming happens in the Prizes chat. No claimable name shown, no
-//     suffix drop.
+//     Just the generic "Make it yours." title + claim-in-the-Prizes-chat
+//     note. No claimable name shown, no suffix drop.
+//
+// All three open with "Make it yours." rather than re-greeting — the results
+// screen already welcomed the new member a beat earlier (and by their display
+// name, not the candidate handle), so a second "Welcome, byteboro.42." here
+// was both redundant and confusing.
 //
 // Hard rule: the suffix-drop ceremony ONLY plays for `'available'`. If
 // availability is anything else (or absent), we celebrate membership
@@ -107,7 +111,7 @@ export default function UsernameCTAScreen({
         />
       )}
       {variant === 'cautious' && (
-        <CautiousVariant previousUsername={previousUsername} onNext={onContinue} />
+        <CautiousVariant onNext={onContinue} />
       )}
     </div>
   )
@@ -241,7 +245,7 @@ function AvailableVariant({ stem, previousUsername, onNext }: AvailableProps) {
   return (
     <>
       <h1 className="username-title" ref={titleRef}>
-        Welcome,<br />{previousUsername ?? 'member'}.
+        Make it yours.
       </h1>
       <div className="username-hint" ref={hintRef}>
         Time to drop the {suffix}.
@@ -347,7 +351,7 @@ function TakenVariant({ name, previousUsername, alternatives, onNext }: TakenPro
   return (
     <>
       <h1 className="username-title" ref={titleRef}>
-        Welcome,<br />{previousUsername ?? 'member'}.
+        Make it yours.
       </h1>
       <div className="username-taken-subhead" ref={subheadRef}>
         <span className="username-taken-name">{name}</span> is already claimed.
@@ -386,11 +390,10 @@ function TakenVariant({ name, previousUsername, alternatives, onNext }: TakenPro
 // ────────────────────────────────────────────────────────────────────────
 
 interface CautiousProps {
-  previousUsername?: string
   onNext: () => void
 }
 
-function CautiousVariant({ previousUsername, onNext }: CautiousProps) {
+function CautiousVariant({ onNext }: CautiousProps) {
   const reduced = prefersReducedMotion()
 
   const titleRef = useRef<HTMLHeadingElement>(null)
@@ -428,7 +431,7 @@ function CautiousVariant({ previousUsername, onNext }: CautiousProps) {
   return (
     <>
       <h1 className="username-title" ref={titleRef}>
-        Welcome,<br />{previousUsername ?? 'member'}.
+        Make it yours.
       </h1>
       <div className="username-note username-note-cautious" ref={noteRef}>
         You can claim your new username in the Prizes chat.

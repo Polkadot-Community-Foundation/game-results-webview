@@ -139,7 +139,7 @@ export default function SealedStage({
       <div className="draw-sealed-header">
         <div className="draw-sealed-eyebrow">Weekly Member Draw</div>
         <div className="draw-sealed-sub">
-          You're in this week's draw, with {winnerCount} winners
+          {winnerCount} winners drawn
           {' '}<InfoTip title={CONCEPTS.prizeDraw.title} body={CONCEPTS.prizeDraw.body} label="How does the prize draw work?" />
         </div>
       </div>

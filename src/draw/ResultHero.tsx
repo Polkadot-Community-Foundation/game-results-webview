@@ -487,7 +487,7 @@ export default function ResultHero({
             data-ready={ctaReady ? 'true' : 'false'}
             aria-live="polite"
           >
-            Membership unlocked
+            You're a member now
           </div>
           <div
             className="draw-consolation-body"

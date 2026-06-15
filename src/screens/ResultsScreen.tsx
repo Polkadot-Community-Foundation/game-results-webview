@@ -32,10 +32,13 @@ interface ResultsScreenProps {
   /** The user's display name for the membership card (outcome-independent,
    *  so it comes from setGameResults, not the outcome). */
   displayName?: string
+  /** How many collectibles the player earned this game (on-shelf count from
+   *  the reveal). Drives the "you collected N" congratulation. */
+  collectedCount: number
   onContinue: () => void
 }
 
-export default function ResultsScreen({ outcome, displayName, onContinue }: ResultsScreenProps) {
+export default function ResultsScreen({ outcome, displayName, collectedCount, onContinue }: ResultsScreenProps) {
   const isCelebration = outcome.justBecameMember
   // Failure copy is uniform — the results screen no longer surfaces
   // rank/progression, so it doesn't distinguish how the player failed.
@@ -115,33 +118,38 @@ export default function ResultsScreen({ outcome, displayName, onContinue }: Resu
     return () => { tl.kill() }
   }, [isCelebration, reduced])
 
-  // Outcome copy — never exposes counts. Teases what's next so the
-  // user knows there's more to come (prize draw, collectibles, etc.).
+  // Outcome copy. Leads with the collectibles haul (count + congrats), then:
+  //   - for players heading into the prize draw, INTRODUCES it (so the draw
+  //     isn't a surprise), and
+  //   - for failed players, a forward nudge — NEVER a "you lost" framing.
+  //     "Not your week" / loss language is reserved for the prize-draw result
+  //     (ResultHero "no win this time"), which only people who actually saw
+  //     the draw reach.
   const passed = outcome.passed
-  const hasPrizeDraw = outcome.prizeDraw !== null
+  const goingToDraw = passed && outcome.prizeDraw !== null
+  const haul = collectedCount === 1 ? '1 collectible' : `${collectedCount} collectibles`
 
   let summaryHeadline: string
   let summarySub: string
   if (passed) {
-    if (outcome.justBecameMember) {
-      // Greet with the user's display name — NOT previousUsername, which is
-      // the old auto-assigned candidate handle (e.g. "byteboro.42") they're
-      // leaving behind; greeting a brand-new member by it reads wrong.
-      summaryHeadline = `Welcome, ${displayName ?? 'member'}.`
-      summarySub = hasPrizeDraw
-        ? `Your first member prize draw is up next.`
-        : `Membership unlocked.`
-    } else {
-      summaryHeadline = `Nice run.`
-      summarySub = hasPrizeDraw
-        ? `Your prize draw is up next.`
-        : `See you next round.`
-    }
+    // Greet new members by display name (NOT previousUsername, the old
+    // candidate handle they're leaving behind).
+    summaryHeadline = outcome.justBecameMember
+      ? `Welcome, ${displayName ?? 'member'}.`
+      : `Nice run.`
+    summarySub = goingToDraw
+      ? `You collected ${haul}, and you've earned a spot in this week's prize draw.`
+      : `You collected ${haul}.`
+  } else if (collectedCount > 0) {
+    // Failed the game but earned collectibles — celebrate the haul, no loss
+    // framing. Membership-agnostic: this branch covers both candidates and
+    // existing members who didn't pass, and the outcome doesn't expose which.
+    summaryHeadline = `Nice haul!`
+    summarySub = `You collected ${haul}. They're saved to your Pocket.`
   } else {
-    // Failed — uniform copy. The reveal already showed whatever collectibles
-    // they earned; the verdict doesn't distinguish how they fell short.
-    summaryHeadline = `Not your week.`
-    summarySub = `Better luck next round.`
+    // Failed with nothing this round — still no "you lost", just a nudge.
+    summaryHeadline = `Next time!`
+    summarySub = `Play and pass games to earn collectibles for your Pocket.`
   }
 
   return (
