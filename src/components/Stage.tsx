@@ -759,17 +759,23 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
       setActiveSlot(-1)
       return
     }
-    api.root()?.classList.remove('is-viewing')
-    gsap.to(api.root(), {
+    const root = api.root()
+    const settle = () => {
+      setSeqPhase('done')
+      setPhase('idle')
+      setActiveSlot(-1)
+    }
+    // root may be null (OrbScene unmounted). gsap throws on a null target
+    // ("...evaluating 't._gsap'"), so skip the fade-out tween and settle
+    // immediately rather than throw out of the tap handler.
+    if (!root) { settle(); return }
+    root.classList.remove('is-viewing')
+    gsap.to(root, {
       opacity: 0,
       scale: 0.94,
       duration: 0.25,
       ease: 'power2.in',
-      onComplete: () => {
-        setSeqPhase('done')
-        setPhase('idle')
-        setActiveSlot(-1)
-      }
+      onComplete: settle
     })
     sfx.play('card-dissolve')
   }, [seqPhase, current])
