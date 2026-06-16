@@ -437,9 +437,9 @@ button:disabled { cursor: default; }
   width: 88px;
   height: 88px;
   object-fit: contain;
-  /* Obscured resting state: heavy blur, dark, desaturated. Visible from
-     the start — no fade-in. */
-  filter: blur(8px) brightness(0.35) saturate(0);
+  /* Dimmed, greyscale "waiting" baseline — the collectible is in place but
+     not yet openable. Heavy blur, dark, fully desaturated. */
+  filter: blur(10px) brightness(0.3) saturate(0);
   transition: filter 0.35s ease-out;
   pointer-events: none;
   position: relative;
@@ -465,31 +465,37 @@ button:disabled { cursor: default; }
   z-index: 0;
 }
 
-/* "Ready" state: a colored outline glow pulses in, the silhouette becomes
-   clickable, hover feedback kicks in. The image itself stays obscured.
-   Entrance is a rain-down: silhouette falls from above the slot, squashes
-   on landing, bounces once, settles. Composites finish at staggered
-   times (140 ms apart per slot, plus IPFS variance) so the rain reads
-   as scattered drops, not a synchronized waterfall. */
+/* "Available" state: the collectible is openable. It does NOT fall in —
+   it materializes in place and "develops" from the dimmed/greyscale
+   waiting look into a brighter, more saturated (but still teased) state,
+   while the colored ring glows in and begins a gentle pulse. Composites
+   resolve at staggered times (per-slot + IPFS variance), so items come
+   into focus one-by-one rather than all at once. */
 .silhouette.is-ready {
   cursor: pointer;
-  animation: silhouetteReadyIn 0.75s cubic-bezier(0.4, 0, 0.4, 1) both;
+  animation: silhouetteAppear 0.55s cubic-bezier(0.34, 1.4, 0.5, 1) both;
 }
 .silhouette.is-ready .silhouette-ring {
   opacity: 1;
-  animation: silhouetteRingPulse 2.2s ease-in-out infinite;
+  animation:
+    silhouetteRingIn 0.55s ease-out both,
+    silhouetteRingPulse 2.2s ease-in-out 0.55s infinite;
 }
 .silhouette.is-ready img {
-  /* Slight lift in brightness/saturation so the viewer senses "this one's
-     live" without de-obscuring it. */
-  filter: blur(8px) brightness(0.55) saturate(0.15)
+  /* Available look: a touch less blur and more saturation than the waiting
+     baseline so it reads as "open me", without fully de-obscuring it. The
+     develop animation ramps from the dimmed baseline into this on entrance;
+     no fill-mode, so this static value is the resting state and hover can
+     still override it. */
+  filter: blur(6px) brightness(0.62) saturate(0.4)
           drop-shadow(0 0 10px rgba(140, 220, 255, 0.6));
+  animation: silhouetteDevelop 0.75s ease-out;
 }
 .silhouette.is-ready:hover {
   transform: scale(1.1);
 }
 .silhouette.is-ready:hover img {
-  filter: blur(8px) brightness(0.75) saturate(0.3)
+  filter: blur(5px) brightness(0.85) saturate(0.55)
           drop-shadow(0 0 16px rgba(170, 230, 255, 0.85));
 }
 .silhouette.is-ready:active {
@@ -502,20 +508,28 @@ button:disabled { cursor: default; }
   border-radius: 8px;
 }
 
-/* Rain-down landing for the silhouette. Falls from well above the slot,
-   squashes wide-and-short on impact, rebounds vertically, settles.
-   Opacity ramps in over the first 12% so bottom-row silhouettes (which
-   don't quite clear the top edge at translateY(-600%) on tall phones)
-   don't visibly "spawn" mid-air. */
-@keyframes silhouetteReadyIn {
-  0%   { transform: translateY(-600%) scale(0.92, 1.08); opacity: 0; }
-  12%  { opacity: 1; }
-  55%  { transform: translateY(0) scale(1.12, 0.86); opacity: 1; }
-  68%  { transform: translateY(-10%) scale(0.95, 1.08); }
-  82%  { transform: translateY(0) scale(1.05, 0.96); }
-  100% { transform: translateY(0) scale(1, 1); }
+/* In-place materialize — NO vertical fall. The collectible is already on
+   its shelf; it just fades and scales up from a slightly-smaller state,
+   with a soft overshoot from the easing. */
+@keyframes silhouetteAppear {
+  0%   { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1);   opacity: 1; }
 }
-/* Gentle breathing ring while ready, to read as "tap me". */
+/* Develop: the image ramps from the dimmed/greyscale waiting baseline into
+   the brighter "available" look, as if coming into focus on the spot. The
+   end frame matches the static .is-ready img filter so the resting state is
+   seamless; no fill-mode, so hover can override once it finishes. */
+@keyframes silhouetteDevelop {
+  0%   { filter: blur(10px) brightness(0.3) saturate(0); }
+  100% { filter: blur(6px) brightness(0.62) saturate(0.4)
+                 drop-shadow(0 0 10px rgba(140, 220, 255, 0.6)); }
+}
+/* Ring glows in from dim before settling into its pulse. */
+@keyframes silhouetteRingIn {
+  0%   { opacity: 0; filter: blur(2px) brightness(0.4); }
+  100% { opacity: 1; filter: blur(2px) brightness(1); }
+}
+/* Gentle breathing ring while available, to read as "tap me". */
 @keyframes silhouetteRingPulse {
   0%, 100% {
     transform: scale(1);
@@ -524,6 +538,16 @@ button:disabled { cursor: default; }
   50% {
     transform: scale(1.08);
     filter: blur(3px) brightness(1.3);
+  }
+}
+/* Reduced motion: no materialize/develop/pulse — snap straight to the
+   available resting look (static filters / opacity 1 apply with animation
+   off). */
+@media (prefers-reduced-motion: reduce) {
+  .silhouette.is-ready,
+  .silhouette.is-ready img,
+  .silhouette.is-ready .silhouette-ring {
+    animation: none;
   }
 }
 
@@ -1112,6 +1136,75 @@ button:disabled { cursor: default; }
 .finale-label[data-visible="true"] {
   opacity: 1;
   transform: translateY(0) scale(1);
+}
+
+/* Spotlight scrim — a soft dark ellipse centered on the completion message
+   + Pocket banner. z:9 keeps it above the shelf (z:2) but below the
+   particle canvas (z:11) so the celebration sparkle still reads over it. */
+.finale-scrim {
+  position: absolute;
+  left: 50%;
+  top: 43%;
+  transform: translate(-50%, -50%);
+  width: 150%;
+  height: 36%;
+  z-index: 9;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(5, 7, 16, 0.82) 0%,
+    rgba(5, 7, 16, 0.6)  40%,
+    rgba(5, 7, 16, 0)    72%);
+  opacity: 0;
+  transition: opacity 0.5s ease-out;
+}
+.finale-scrim[data-visible="true"] {
+  opacity: 1;
+}
+
+/* "Find these anytime in your Pocket." — the single home for this
+   reassurance, just under the completion headline. Fades in a beat after
+   the label. */
+.finale-pocket-banner {
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  z-index: 24;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(160, 200, 255, 0.22);
+  color: rgba(230, 235, 250, 0.94);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%) translateY(8px);
+  transition:
+    opacity 0.45s ease-out 0.15s,
+    transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s;
+}
+.finale-pocket-banner[data-visible="true"] {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* Recede into the background when a collectible is tapped — mirrors the
+   finale-label. Dims via background/border/color/backdrop (none of which are
+   in the transition list above), so it snaps instantly rather than slowly
+   fading out, and drops below the focused card (card-slot z:13). */
+.finale-pocket-banner[data-viewing="true"] {
+  z-index: 8;
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(160, 200, 255, 0.08);
+  color: rgba(228, 230, 245, 0.34);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* Unison pop on every shelf badge when the finale fires. Distinct keyframe
@@ -2969,6 +3062,32 @@ button:disabled { cursor: default; }
   contain: paint;
 }
 
+/* "Nice haul!" backdrop — the SAME burst asset as the celebration, but
+   muted: a static saturate/brightness filter desaturates and dims it so it
+   reads as a quiet echo rather than the full membership payoff. Opacity is
+   driven by GSAP (resting ~0.32, vs the celebration's 0.6). Positioning and
+   the perf hints mirror .results-celebration-bg. */
+.results-haul-bg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: 160%;
+  width: auto;
+  max-width: none;
+  transform-origin: 50% 50%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  mix-blend-mode: screen;
+  filter: saturate(0.4) brightness(0.62);
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  z-index: 0;
+  will-change: opacity, transform;
+  contain: paint;
+}
+
 .results-celebration-headline {
   position: relative;
   z-index: 2;
@@ -3064,6 +3183,17 @@ button:disabled { cursor: default; }
   font-weight: 500;
   color: rgba(220, 215, 255, 0.72);
   line-height: 1.45;
+}
+/* Forward nudge on the "Nice haul!" screen — slightly brighter and warmer
+   than the sub so it reads as the call-to-action, not fine print. */
+.results-haul-nudge {
+  margin-top: 14px;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  color: rgba(255, 220, 235, 0.92);
+  text-shadow: 0 0 16px rgba(255, 120, 180, 0.35);
 }
 .results-continue {
   margin-top: auto;
@@ -3869,6 +3999,11 @@ button:disabled { cursor: default; }
   background: linear-gradient(180deg, #fff5d8 0%, #f6c869 52%, #e0a23a 100%);
   -webkit-background-clip: text; background-clip: text;
   color: transparent;
+  /* background-clip:text fills glyphs only where the background paints (the
+     element box). The deep `g` descender overshoots a tight line box, so
+     extend the paint area below the baseline so its tail isn't clipped. */
+  line-height: 1.12;
+  padding-bottom: 0.16em;
   /* Ongoing euphoric glow. drop-shadow (not text-shadow) so it shows through
      the background-clipped text. GSAP only touches transform, so no clash. */
   animation: doneGlow 2.2s ease-in-out infinite;
@@ -3882,7 +4017,9 @@ button:disabled { cursor: default; }
   font-size: 14px;
   letter-spacing: 0.02em;
   color: rgba(230, 226, 250, 0.78);
-  margin-top: -14px;
+  /* Pulled up to sit close under the headline; extra negative offset absorbs
+     the headline's new bottom padding (added to un-clip the descender). */
+  margin-top: -20px;
 }
 .done-burst {
   position: absolute;
@@ -3959,6 +4096,59 @@ button:disabled { cursor: default; }
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 .handoff-cta:active { transform: scale(0.96); }
+
+/* ---------- No attestations (skunk) exit ---------- */
+.noattest-screen {
+  position: absolute; inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 32px 28px;
+  text-align: center;
+  z-index: 5;
+}
+.noattest-mark {
+  font-size: 40px;
+  color: rgba(200, 196, 230, 0.45);
+}
+.noattest-headline {
+  font-family: var(--font-title);
+  font-weight: 900;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #fff;
+  max-width: 320px;
+  margin: 0;
+}
+.noattest-sub {
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.45;
+  color: rgba(220, 215, 255, 0.72);
+  margin: 0;
+}
+.noattest-cta {
+  margin-top: 8px;
+  border: 0;
+  cursor: pointer;
+  background: var(--pink);
+  color: #fff;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.04em;
+  padding: 16px 44px;
+  border-radius: 999px;
+  min-width: 200px;
+  box-shadow:
+    0 12px 30px var(--pink-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.noattest-cta:active { transform: scale(0.96); }
+.noattest-cta:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
 
 /* ---------- Dev panel ---------- */
 .dev-panel {
@@ -4632,24 +4822,37 @@ button:disabled { cursor: default; }
   text-shadow: 0 0 0.5px rgba(0, 0, 0, 0.5);
   opacity: 0.92;
 }
-/* Seal-break light sweep — sits over the ticket, animated via GSAP
-   on REVEAL tap. Pure CSS gradient, no asset. */
+/* Seal-break light sweep — sits over the ticket, animated via GSAP on
+   REVEAL tap. A diagonal gradient band fills the whole ticket box and is
+   swept by animating its background-position; the 115deg angle supplies the
+   diagonal (no skew, which would push the band past the masked silhouette).
+   The element is masked (mask-image set inline to the ticket asset) to the
+   ticket's own shape so the shine never spills onto the transparent corners
+   of the bounding box. Because it never transforms, the mask stays aligned
+   with the ticket image behind it, and mix-blend-mode: screen still glints
+   against the ticket art. */
 .draw-sealed-ticket-seal {
   position: absolute;
-  top: 0; bottom: 0;
-  left: 0;
-  width: 30%;
-  background: linear-gradient(115deg,
-    rgba(255, 245, 215, 0)    0%,
-    rgba(255, 245, 215, 0.18) 35%,
-    rgba(255, 245, 215, 0.85) 50%,
-    rgba(255, 245, 215, 0.18) 65%,
-    rgba(255, 245, 215, 0)    100%);
-  transform: skewX(-18deg);
+  inset: 0;
+  background-image: linear-gradient(115deg,
+    rgba(255, 245, 215, 0)    40%,
+    rgba(255, 245, 215, 0.2)  46%,
+    rgba(255, 245, 215, 0.9)  50%,
+    rgba(255, 245, 215, 0.2)  54%,
+    rgba(255, 245, 215, 0)    60%);
+  background-repeat: no-repeat;
+  background-size: 250% 100%;
+  background-position: 160% 0%;
   filter: blur(1.5px);
   mix-blend-mode: screen;
   pointer-events: none;
   opacity: 0;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
 }
 
 .draw-reveal-cta {

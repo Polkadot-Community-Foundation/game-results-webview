@@ -155,6 +155,10 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
   useEffect(() => { arrivedRef.current = readySlots.size }, [readySlots])
   const streamSettledRef = useRef(streamSettled)
   useEffect(() => { streamSettledRef.current = streamSettled }, [streamSettled])
+  // Mirror onComplete so the completion fail-safe timer below always calls the
+  // latest closure (NFTRevealScreen passes a fresh arrow each render).
+  const onCompleteRef = useRef(onComplete)
+  useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
 
   const cardRefs = useRef<Record<number, OrbApi>>({})
   const slotRef = useRef<SlotGridApi>(null)
@@ -340,6 +344,44 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
       setSeqPhase('done')
     }
   }, [seqPhase, streamSettled, filled, readySlots])
+
+  // ── Reveal completion fail-safe ──────────────────────────────────────────
+  // Every reveal here is a MANUAL silhouette tap (onSilhouetteClick); nothing
+  // advances on its own while the user rests in 'browsing'. So a user who stops
+  // tapping with cards still on the shelf hangs indefinitely — the settle→finale
+  // effect above bails while a card is ready-but-unstored, and the stuck-overlay
+  // escape is suppressed for the same reason. That is the field "stuck" report:
+  // the reveal sits there and flow.nft_reveal_complete never fires (debug logs,
+  // game 92: nft_reveal_started count=2, no reveal_complete, user force-closed
+  // after ~45s).
+  //
+  // Once the stream has SETTLED, bound the wait: if the user stays idle in
+  // 'browsing' with ready-but-unstored cards for FAILSAFE_IDLE_MS, finish for
+  // them — snap-fill whatever resolved, then fire onComplete. A manual tap moves
+  // us out of 'browsing' (→ 'revealing') and tears this timer down, so an engaged
+  // user is never interrupted; it re-arms only when they return to an idle shelf.
+  // Attestations live in the channel buffer regardless of local store state, so
+  // the downstream collected-count is unaffected.
+  const FAILSAFE_IDLE_MS = 8_000
+  useEffect(() => {
+    if (seqPhase !== 'browsing') return
+    if (!streamSettled) return
+    const readyUnstored = Array.from(readySlots).some((i) => !filled[i])
+    if (!readyUnstored) return  // settle→finale / stuck-overlay cover the rest
+    const t = window.setTimeout(() => {
+      setFilled((prev) => {
+        const next = prev.slice()
+        const cs = cardsRef.current
+        for (let i = 0; i < cs.length; i++) {
+          const src = cs[i]?.badgeSrc
+          if (src && !next[i]) next[i] = src
+        }
+        return next
+      })
+      onCompleteRef.current?.()
+    }, FAILSAFE_IDLE_MS)
+    return () => window.clearTimeout(t)
+  }, [seqPhase, streamSettled, readySlots, filled])
 
   // Auto-collect: while Collect-All is active and the stream is still open,
   // snap-fill each newly-arrived attestation as it resolves. This is what
@@ -1131,6 +1173,16 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
 
         <ActionLabel mode={buttonMode} />
 
+        {/* Soft spotlight scrim that darkens the shelf behind the completion
+            message + Pocket banner so both read clearly. Sits below the
+            particle canvas (z:11) so the celebration sparkle still pops over
+            it, and hides while inspecting a single tapped card. */}
+        <div
+          className="finale-scrim"
+          data-visible={finaleVisible && seqPhase !== 'viewing' ? 'true' : 'false'}
+          aria-hidden="true"
+        />
+
         <div
           className="finale-label"
           data-visible={finaleVisible ? 'true' : 'false'}
@@ -1140,6 +1192,19 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
           {/* "Collection complete!" only when the full 10-slot shelf was
               earned; a partial haul gets a non-overclaiming line. */}
           {revealedCount >= SHELF_SIZE ? 'Collection complete!' : 'All collected!'}
+        </div>
+
+        {/* The one place we tell the user where their collectibles live — so
+            the wordier flow screens don't have to repeat it. Like the
+            finale-label, it stays put and recedes (dims + drops behind the
+            card) when a collectible is tapped — it doesn't animate away. */}
+        <div
+          className="finale-pocket-banner"
+          data-visible={finaleVisible ? 'true' : 'false'}
+          data-viewing={seqPhase === 'viewing' ? 'true' : 'false'}
+          aria-hidden={!finaleVisible}
+        >
+          Find these anytime in your Pocket.
         </div>
 
         {continueVisible && seqPhase !== 'viewing' && onComplete && (

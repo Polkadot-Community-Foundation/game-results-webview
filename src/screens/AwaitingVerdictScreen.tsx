@@ -16,8 +16,10 @@ import { prefersReducedMotion } from '../anim/easings'
 
 // How long before the manual "Check your Pocket" escape appears. Short enough
 // that an impatient user isn't trapped, long enough that the verdict usually
-// lands first and they never see it.
-const SKIP_AFTER_MS = 12_000
+// lands first and they never see it. Kept comfortably below App's auto-fallback
+// (AWAIT_VERDICT_QUIET_MS, now ~6s) so it's a real choice the user can act on
+// before the screen routes itself — not a button that flashes and vanishes.
+const SKIP_AFTER_MS = 3_000
 
 interface AwaitingVerdictScreenProps {
   /** Leave for the Pocket handoff (manual escape). */

@@ -7,6 +7,7 @@ import NFTRevealScreen from './screens/NFTRevealScreen'
 import UsernameCTAScreen from './screens/UsernameCTAScreen'
 import HandoffScreen from './screens/HandoffScreen'
 import AwaitingVerdictScreen from './screens/AwaitingVerdictScreen'
+import NoAttestationsScreen from './screens/NoAttestationsScreen'
 import DoneScreen from './screens/DoneScreen'
 import BootErrorScreen from './screens/BootErrorScreen'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -51,17 +52,35 @@ const BOOT_TIMEOUT_MS = 30_000
 const STALL_QUIET_MS = 9_000
 const REVEAL_CAP_MS = 45_000
 
-// After the reveal, if the outcome hasn't resolved we wait on the
-// awaiting-verdict screen rather than dropping straight to the Pocket handoff.
-// Collectibles arrive fast now, so a quiet reveal just means "verdict still
-// landing", not "give up". Only after this (deliberately long) wait do we fall
-// back to the handoff; a manual "Check your Pocket" escape appears sooner (see
-// AwaitingVerdictScreen) so an impatient user is never trapped.
-const AWAIT_VERDICT_TIMEOUT_MS = 120_000
+// "Tallying your results…" hold. After a no-outcome reveal we wait BRIEFLY for
+// a late-landing verdict, then fall back to the Pocket handoff. Tuned from the
+// debug-log timeline rather than a flat guess:
+//   • A genuine PASS resolves almost instantly once the streamed count crosses
+//     the threshold — native fires setGameOutcome within ~70ms of the 6th
+//     collectible (logs: 6th matched 15:32:35.240 → outcome eval 15:32:35.312).
+//   • Collectibles stream in close together; the largest gap between two
+//     consecutive arrivals in the field logs was ~5s. And the reveal only
+//     reaches this screen AFTER the stream already went quiet (STALL_QUIET_MS)
+//     or hit the cap — so by here the stream is usually already finished.
+//
+// So instead of one long timer (the old 20s, which just trapped sub-threshold
+// players staring at the spinner — the field "stuck" report), hold a short
+// ACTIVITY-AWARE window: a fresh collectible push means the stream is still
+// alive and a threshold-cross may be imminent, so re-arm the quiet timer; once
+// the stream is silent (the common case) hand off promptly. A hard cap keeps
+// even an active-but-never-passing stream from ever feeling stuck. The handoff
+// is the designed no-outcome terminal and still routes back to the verdict if a
+// late pass lands before dismissal (see the handoff effect below) — so a quick
+// fall-back can never *lose* an outcome. The verdict, whenever it arrives,
+// routes straight to results via `outcome`. A manual "Check your Pocket" escape
+// appears sooner still (see AwaitingVerdictScreen).
+const AWAIT_VERDICT_QUIET_MS = 6_000   // hand off this long after the last collectible arrives
+const AWAIT_VERDICT_MAX_MS = 12_000    // absolute cap, even while collectibles keep trickling
 
 type Screen =
   | 'boot' | 'boot_error' | 'chest' | 'nft_reveal' | 'results'
-  | 'prize_draw' | 'username_cta' | 'awaiting_verdict' | 'handoff' | 'done'
+  | 'prize_draw' | 'username_cta' | 'awaiting_verdict'
+  | 'no_attestations' | 'handoff' | 'done'
 
 // The collectibles reveal is the FIRST beat (after the chest) so it can
 // absorb the time while attestations stream in. The outcome — pass/fail and
@@ -87,8 +106,8 @@ function synthOutcome(input: GameResultsInput): GameOutcome | null {
 }
 
 // After the reveal: the verdict if the outcome resolved, else WAIT for it on
-// the awaiting-verdict screen (which only falls back to the Pocket handoff
-// after a long wait).
+// the awaiting-verdict screen (which falls back to the Pocket handoff after a
+// short, activity-aware wait).
 function nextAfterReveal(outcome: GameOutcome | null): Screen {
   return outcome ? 'results' : 'awaiting_verdict'
 }
@@ -347,15 +366,38 @@ export default function App() {
     sendFlowEvent({ type: 'flow.results_shown' })
   }, [screen])
 
+  // Zero attestations (a true skunk): the reveal settled with nothing on the
+  // shelf. Attestations are the proof you're a real, unique human, so none =
+  // a definitive fail (you can't pass with zero). Skip the verdict/handoff and
+  // go straight to the dedicated "not human enough" exit.
+  useEffect(() => {
+    if (screen !== 'nft_reveal') return
+    if (!streamSettled) return
+    if (onShelfAttestationCount(SHELF_SIZE) !== 0) return
+    setScreen('no_attestations')
+  }, [screen, streamSettled])
+
   // Awaiting-verdict: after the reveal with no resolved outcome, hold on the
-  // "tallying results" screen. Route to the verdict the instant it lands; only
-  // after a long wait auto-fall-back to the Pocket handoff. (The screen also
-  // offers a manual "Check your Pocket" escape → handoff, see its onSkip.)
+  // "tallying results" screen. Route to the verdict the instant it lands; else
+  // fall back to the Pocket handoff on a short, activity-aware timer (see the
+  // AWAIT_VERDICT_* notes above). Each fresh collectible push re-arms the quiet
+  // window so a late threshold-cross still surfaces the verdict; a hard cap
+  // bounds the total wait. (The screen also offers a manual "Check your Pocket"
+  // escape → handoff, see its onSkip.)
   useEffect(() => {
     if (screen !== 'awaiting_verdict') return
     if (outcome) { setScreen('results'); return }
-    const t = window.setTimeout(() => setScreen('handoff'), AWAIT_VERDICT_TIMEOUT_MS)
-    return () => window.clearTimeout(t)
+    const toHandoff = () => setScreen('handoff')
+    const hardCap = window.setTimeout(toHandoff, AWAIT_VERDICT_MAX_MS)
+    let quiet = window.setTimeout(toHandoff, AWAIT_VERDICT_QUIET_MS)
+    // A new push = stream still alive, verdict possibly imminent → re-arm the
+    // quiet window (still bounded by hardCap). subscribeAttestations replays
+    // buffered pushes synchronously here, which simply (re)arms it once.
+    const off = subscribeAttestations(() => {
+      window.clearTimeout(quiet)
+      quiet = window.setTimeout(toHandoff, AWAIT_VERDICT_QUIET_MS)
+    })
+    return () => { window.clearTimeout(hardCap); window.clearTimeout(quiet); off() }
   }, [screen, outcome])
 
   // Route out of the terminal handoff if the outcome resolves before the user
@@ -378,8 +420,13 @@ export default function App() {
     if (screen === 'chest') {
       setScreen('nft_reveal')
     } else if (screen === 'nft_reveal') {
-      // Verdict if the outcome resolved; otherwise the Pocket handoff.
-      setScreen(nextAfterReveal(outcome))
+      // Zero attestations → the "not human enough" exit (definitive skunk);
+      // otherwise the verdict if resolved, else the awaiting-verdict wait.
+      if (onShelfAttestationCount(SHELF_SIZE) === 0) {
+        setScreen('no_attestations')
+      } else {
+        setScreen(nextAfterReveal(outcome))
+      }
     } else if (screen === 'results') {
       setScreen(nextAfterVerdict(outcome))
     } else if (screen === 'username_cta') {
@@ -591,6 +638,9 @@ export default function App() {
         )}
         {screen === 'awaiting_verdict' && (
           <AwaitingVerdictScreen onSkip={() => setScreen('handoff')} />
+        )}
+        {screen === 'no_attestations' && (
+          <NoAttestationsScreen onDone={() => sendFlowEvent({ type: 'flow.complete' })} />
         )}
         {screen === 'handoff' && (
           <HandoffScreen onDone={handleHandoffDone} />
