@@ -51,48 +51,36 @@ jobs:
           path: dist
           retention-days: 1
 
-  # PR previews deploy to previewnet only (env: preview).
-  deploy-preview:
-    needs: build
-    name: Deploy Preview
-    if: github.event_name == 'pull_request'
-    uses: paritytech/bulletin-deploy/.github/workflows/deploy.yml@main
-    with:
-      artifact-name: game-webview-build
-      dotns-domain: game-webview-pr${{ github.event.pull_request.number }}-preview00.dot
-      comment-on-pr: true
-      env: preview
-      gateway: dot.li
-      skip-cache: true
-      max-retries: 10
-      bulletin-deploy-version: "0.7.30-rc.0"
-    secrets:
-      mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
-
-  # Production (push to main / manual) publishes game-webview.dot to previewnet
-  # only (env: preview). The Paseo (paseo-next-v2 / paseo.li) leg has been
-  # removed — PCF CI must never deploy to Paseo. The former matrix collapses to
-  # a single previewnet call.
+  # Production (push to main / manual) publishes game-webview.dot to the Summit
+  # network only, via the PCF polkadot-app-deploy reusable workflow. PR previews
+  # are intentionally NOT deployed: each preview label is a fresh DotNS
+  # registration on Summit (storage deposit + ~14d Bulletin expiry + PoP gate),
+  # so previews stay off Summit and `build` above is the PR gate. The previous
+  # previewnet legs (paritytech/bulletin-deploy, env: preview) have been removed
+  # — PCF CI must deploy to Summit only.
   #
-  # NOTE: this reusable workflow (paritytech/bulletin-deploy) has no `summit`
-  # env, so it cannot target Summit. The production Summit deploy is done out of
-  # band via the polkadot-app-deploy CLI (see the Summit webviews runbook).
-  # Migrating this job to a Summit-capable workflow is tracked separately.
+  # skip-cache: true forces every push to redeploy (the reusable workflow keys
+  # its cache on build-content hash only, so unchanged content would skip).
   #
-  # skip-cache: true is kept (harmless for a single leg; the reusable workflow
-  # keys its deploy cache on the build-content hash only).
+  # direct-signer: true — on Summit the default pool-mode storage accounts come
+  # from a public phrase and are NOT Bulletin-authorized; only the DOTNS_MNEMONIC
+  # account is, so it must sign the storage txs itself.
+  #
+  # publish: false — Summit's DotNS deployment has no Publisher registry.
   deploy-production:
     needs: build
-    name: Deploy Production (preview)
+    name: Deploy Production (Summit)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    uses: paritytech/bulletin-deploy/.github/workflows/deploy.yml@main
+    uses: Polkadot-Community-Foundation/polkadot-app-deploy/.github/workflows/deploy.yml@v0.11.0
     with:
       artifact-name: game-webview-build
       dotns-domain: game-webview.dot
-      env: preview
+      env: summit
       gateway: dot.li
+      direct-signer: true
+      publish: false
       skip-cache: true
       max-retries: 10
-      bulletin-deploy-version: "0.7.30-rc.0"
+      polkadot-app-deploy-version: "0.11.0"
     secrets:
       mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
