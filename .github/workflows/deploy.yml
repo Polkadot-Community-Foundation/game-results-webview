@@ -40,6 +40,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Assert bundle is Paseo-free
+        run: |
+          if grep -rIil 'paseo' dist; then echo "::error::Paseo reference in built bundle"; exit 1; fi
+          echo "OK: no Paseo in bundle"
+
       - uses: actions/upload-artifact@v4
         with:
           name: game-webview-build
@@ -64,37 +69,28 @@ jobs:
     secrets:
       mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
 
-  # Production (push to main / manual) publishes game-webview.dot to BOTH
-  # networks: previewnet (env: preview) and paseo-next-v2. Each matrix leg
-  # is an independent reusable-workflow call; fail-fast: false so one
-  # network's failure doesn't cancel the other.
+  # Production (push to main / manual) publishes game-webview.dot to previewnet
+  # only (env: preview). The Paseo (paseo-next-v2 / paseo.li) leg has been
+  # removed — PCF CI must never deploy to Paseo. The former matrix collapses to
+  # a single previewnet call.
   #
-  # skip-cache: true is REQUIRED here. The reusable workflow keys its
-  # deploy cache on the build-content hash only (no env/network), so with
-  # caching on, whichever leg finishes first would populate the cache and
-  # the other network's leg would cache-hit and SKIP its deploy entirely —
-  # never publishing to that network. Forcing skip-cache makes both legs
-  # always deploy. (Tradeoff: every push to main redeploys both networks
-  # even when the build content is unchanged. The workflow_dispatch
-  # skip-cache input no longer affects production for this reason.)
+  # NOTE: this reusable workflow (paritytech/bulletin-deploy) has no `summit`
+  # env, so it cannot target Summit. The production Summit deploy is done out of
+  # band via the polkadot-app-deploy CLI (see the Summit webviews runbook).
+  # Migrating this job to a Summit-capable workflow is tracked separately.
+  #
+  # skip-cache: true is kept (harmless for a single leg; the reusable workflow
+  # keys its deploy cache on the build-content hash only).
   deploy-production:
     needs: build
-    name: Deploy Production (${{ matrix.env }})
+    name: Deploy Production (preview)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - env: preview
-            gateway: dot.li
-          - env: paseo-next-v2
-            gateway: paseo.li
     uses: paritytech/bulletin-deploy/.github/workflows/deploy.yml@main
     with:
       artifact-name: game-webview-build
       dotns-domain: game-webview.dot
-      env: ${{ matrix.env }}
-      gateway: ${{ matrix.gateway }}
+      env: preview
+      gateway: dot.li
       skip-cache: true
       max-retries: 10
       bulletin-deploy-version: "0.7.30-rc.0"
