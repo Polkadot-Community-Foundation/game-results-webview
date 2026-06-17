@@ -10,7 +10,13 @@ import { useEffect, useState } from 'react'
 import { subscribeAttestations, onShelfAttestationCount } from '../bridge/attestations'
 import { SHELF_SIZE } from './Stage'
 
-export default function AttestationGauge() {
+interface AttestationGaugeProps {
+  /** Fade the gauge out (e.g. once every collectible is opened, before the
+   *  Continue button appears). Kept mounted so it transitions rather than pops. */
+  hidden?: boolean
+}
+
+export default function AttestationGauge({ hidden = false }: AttestationGaugeProps) {
   const [count, setCount] = useState(() => onShelfAttestationCount(SHELF_SIZE))
 
   useEffect(() => {
@@ -23,6 +29,7 @@ export default function AttestationGauge() {
   return (
     <div
       className="att-gauge"
+      data-hidden={hidden ? 'true' : 'false'}
       role="img"
       aria-label={`${count} of ${SHELF_SIZE} collectibles in`}
     >

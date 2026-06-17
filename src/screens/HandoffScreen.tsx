@@ -42,7 +42,7 @@ export default function HandoffScreen({ onDone }: HandoffScreenProps) {
         We're wrapping up your results. Everything will be waiting in your
         Pocket.
       </p>
-      <button type="button" className="handoff-cta" onClick={onDone}>
+      <button type="button" className="handoff-cta cta-primary" onClick={onDone}>
         Got it
       </button>
     </div>

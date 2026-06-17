@@ -153,6 +153,9 @@ export default function App() {
   })
   // The reveal stops waiting for more cards (enables the finale) once true.
   const [streamSettled, setStreamSettled] = useState(false)
+  // True once the reveal finale lands (every collectible opened). Drives the
+  // streaming gauge away before the Continue button appears.
+  const [revealFinale, setRevealFinale] = useState(false)
   // Resolved collectible image URLs by slot index, accumulated from the
   // attestation stream — the SAME art the reveal shows. Feeds the album-close
   // beat so the album pages show the user's real collectibles.
@@ -420,6 +423,7 @@ export default function App() {
   function advance(): void {
     if (!input) return
     if (screen === 'chest') {
+      setRevealFinale(false) // fresh gauge for the reveal we're entering
       setScreen('nft_reveal')
     } else if (screen === 'nft_reveal') {
       // Zero attestations → the "not human enough" exit (definitive skunk);
@@ -500,6 +504,7 @@ export default function App() {
     setInput(upfront)
     setOutcome(null)
     setStreamSettled(false)
+    setRevealFinale(false)
     setAvailability(undefined)
     setAlternatives(undefined)
     hasFiredPackShown.current = false
@@ -617,10 +622,12 @@ export default function App() {
             streamSettled={streamSettled}
             onContinue={advance}
             onShelfCaptured={(items) => { shelfFlyRef.current = items }}
+            onFinale={() => setRevealFinale(true)}
           />
         )}
-        {/* Lower-left gauge: how many collectibles have streamed in so far. */}
-        {screen === 'nft_reveal' && <AttestationGauge />}
+        {/* Lower-left gauge: how many collectibles have streamed in so far.
+            Fades out once the finale lands (all opened), before Continue. */}
+        {screen === 'nft_reveal' && <AttestationGauge hidden={revealFinale} />}
         {screen === 'results' && outcome && (
           <ResultsScreen
             outcome={outcome}

@@ -252,7 +252,7 @@ export default function ResultsScreen({ outcome, displayName, collectedCount, on
 
       <button
         type="button"
-        className="results-continue"
+        className="results-continue cta-primary"
         ref={ctaRef}
         onClick={onContinue}
         disabled={!ctaReady}

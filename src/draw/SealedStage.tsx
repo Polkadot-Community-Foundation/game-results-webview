@@ -180,7 +180,7 @@ export default function SealedStage({
 
       <button
         type="button"
-        className="draw-reveal-cta"
+        className="draw-reveal-cta cta-primary"
         onClick={handleReveal}
         disabled={!ctaReady}
       >

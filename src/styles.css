@@ -44,6 +44,35 @@ button {
 }
 button:disabled { cursor: default; }
 
+/* ---------- Primary CTA (designer's gradient button language) ----------
+   The post-game flow's single button system, matching the prototype
+   (Figma 38:5518 — the chest "Open the chest" / reveal "Done" CTA): a
+   full-width rounded-rect with the blue gradient, bold Mulish, layered glow +
+   inset highlights, and a subtle press. Each screen's own rule supplies only
+   positioning/width; this owns the look so every CTA reads as one system. */
+.cta-primary {
+  height: 56px;
+  border: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-sizing: border-box;
+  font-family: var(--font-title, 'Mulish'), system-ui, sans-serif;
+  font-weight: 1000;
+  font-size: 22px;
+  letter-spacing: 0.44px;
+  color: #fff;
+  background: linear-gradient(180deg, #3b62fa 0%, #343fb7 52%, #543ca5 100%);
+  box-shadow:
+    0 0 16px rgba(14, 15, 64, 0.85),
+    0 8px 24px rgba(59, 98, 250, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.28);
+  text-shadow: 0 1px 2px rgba(15, 25, 80, 0.55);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.cta-primary:active { transform: scale(0.97); }
+
 .page {
   position: fixed; inset: 0;
   display: grid; place-items: center;
@@ -3196,32 +3225,16 @@ button:disabled { cursor: default; }
   text-shadow: 0 0 16px rgba(255, 120, 180, 0.35);
 }
 .results-continue {
+  /* Look comes from .cta-primary; this rule only places + sizes the bar. */
   margin-top: auto;
   margin-bottom: 4px;
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  padding: 16px 36px;
-  border-radius: 999px;
-  min-width: 200px;
-  box-shadow:
-    0 12px 30px var(--accent-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  width: 100%;
 }
 .results-continue[data-ready="false"] {
   opacity: 0.5;
   cursor: default;
 }
 .results-continue:active { transform: scale(0.96); }
-.results-continue:hover[data-ready="true"] {
-  box-shadow:
-    0 16px 38px var(--accent-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
 
 /* ---------- Member card ---------- */
 .member-card {
@@ -3593,29 +3606,22 @@ button:disabled { cursor: default; }
 
 /* ---------- NFT reveal — Continue button after finale ---------- */
 .stage-continue {
-  position: absolute;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.04em;
-  padding: 13px 28px;
-  border-radius: 999px;
-  min-width: 180px;
-  z-index: 30;
-  box-shadow:
-    0 10px 28px var(--pink-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  animation: fadeUpIn 0.45s ease-out;
+  /* Look comes from .cta-primary; positioning is (re)asserted after the shared
+     CTA block below so it beats that block's position: relative. Only the
+     entrance lives here — translateY-only, so it can't fight the left/right
+     placement the way the old centring transform did. */
+  animation: fadeUpInBar 0.45s ease-out;
 }
-.stage-continue:active { transform: translateX(-50%) scale(0.96); }
+.stage-continue:active { transform: scale(0.97); }
 @keyframes fadeUpIn {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
+}
+/* Entrance for full-width .cta-primary bars (positioned via left/right, not a
+   centring transform) — translateY only, no -50%. */
+@keyframes fadeUpInBar {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ---------- NFT reveal — stuck-screen recovery overlay ----------
@@ -3863,13 +3869,11 @@ button:disabled { cursor: default; }
 }
 
 .username-cta {
+  /* Look comes from .cta-primary; this rule only places + sizes the bar
+     (bottom-pinned, full-width — like the other screens' CTAs). */
   margin-top: auto;
   margin-bottom: 0;
-  padding: 16px 36px;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  border-radius: 999px;
-  min-width: 220px;
+  width: 100%;
   z-index: 2;
 }
 .username-cta:active { transform: scale(0.96); }
@@ -3978,18 +3982,8 @@ button:disabled { cursor: default; }
   letter-spacing: 0.02em;
 }
 .done-cta {
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  padding: 16px 44px;
-  border-radius: 999px;
-  min-width: 200px;
-  box-shadow:
-    0 12px 30px var(--pink-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  /* Look comes from .cta-primary; this rule only sizes the bar. */
+  width: 100%;
 }
 .done-cta:active { transform: scale(0.96); }
 
@@ -4079,21 +4073,9 @@ button:disabled { cursor: default; }
   margin: 0;
 }
 .handoff-cta {
+  /* Look comes from .cta-primary; this rule only places + sizes the bar. */
   margin-top: 8px;
-  border: 0;
-  cursor: pointer;
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  padding: 16px 44px;
-  border-radius: 999px;
-  min-width: 200px;
-  box-shadow:
-    0 12px 30px var(--pink-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  width: 100%;
 }
 .handoff-cta:active { transform: scale(0.96); }
 
@@ -4131,21 +4113,9 @@ button:disabled { cursor: default; }
   margin: 0;
 }
 .noattest-cta {
+  /* Look comes from .cta-primary; this rule only places + sizes the bar. */
   margin-top: 8px;
-  border: 0;
-  cursor: pointer;
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  padding: 16px 44px;
-  border-radius: 999px;
-  min-width: 200px;
-  box-shadow:
-    0 12px 30px var(--pink-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  width: 100%;
 }
 .noattest-cta:active { transform: scale(0.96); }
 .noattest-cta:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
@@ -4332,25 +4302,20 @@ button:disabled { cursor: default; }
      it re-asserted below this block. */
   position: relative;
   overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    #7686ff 0%,
-    #5163f5 35%,
-    #3a3fd5 70%,
-    #2c25b0 100%
-  );
+  /* Designer's CTA gradient (Figma 38:5518): blue → indigo → purple. This was
+     a flat all-blue 4-stop (#7686ff→#2c25b0) — that's what dropped the purple.
+     Same gradient as .cta-primary so every CTA reads identically. */
+  background: linear-gradient(180deg, #3b62fa 0%, #343fb7 52%, #543ca5 100%);
   color: #fff;
   font-family: var(--font-title);
-  font-weight: 700;
+  font-weight: 1000;
   /* Dark-blue text-shadow seats the glyphs into the surface. */
   text-shadow: 0 1px 2px rgba(15, 25, 80, 0.55);
-  /* Layered shadows: outer blue glow + soft drop + inner top highlight +
-     inner bottom-rim shadow. Same recipe as Collect-All; gives a tactile
-     bevel without a wrapper element. */
+  /* Layered glow + inset highlights — matches the prototype CTA shadow. */
   box-shadow:
-    0 10px 24px rgba(70, 80, 220, 0.45),
-    0 2px 4px rgba(0, 0, 0, 0.20),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 0 16px rgba(14, 15, 64, 0.85),
+    0 8px 24px rgba(59, 98, 250, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
     inset 0 -1px 2px rgba(0, 0, 0, 0.28);
   will-change: transform, opacity;
   border: 0;
@@ -4423,14 +4388,17 @@ button:disabled { cursor: default; }
 /* Per-button positioning overrides — must come AFTER the shared CTA
    block so they win the cascade for `position`. */
 .stage-continue {
+  /* Re-assert absolute + full-width AFTER the shared CTA block (which sets
+     position: relative). Full-width bar — NO left:50%/translateX centring: that
+     static transform fought the entrance animation (which animates translateY)
+     and made the button jump sideways as it loaded in. */
   position: absolute;
-  /* Clear the home indicator / gesture bar (floors at 28px). */
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
-  left: 50%;
-  transform: translateX(-50%);
+  left: 16px;
+  right: 16px;
+  bottom: max(calc(env(safe-area-inset-bottom, 0px) + 16px), 34px);
   z-index: 30;
 }
-.stage-continue:active { transform: translateX(-50%) scale(0.96); }
+.stage-continue:active { transform: scale(0.97); }
 
 /* Loss-path Continue button: same bottom-anchored placement as the
    win-side Claim CTA. Lives here (after the shared CTA block) so
@@ -4856,21 +4824,10 @@ button:disabled { cursor: default; }
 }
 
 .draw-reveal-cta {
+  /* Look comes from .cta-primary (matches the prototype's blue draw CTA);
+     this rule only places + sizes the bar. */
   margin-top: 18px;
-  padding: 16px 44px;
-  background: linear-gradient(180deg, #f6c869, #d29539);
-  color: #2a0807;
-  border: none;
-  border-radius: 999px;
-  font: 800 13px/1 ui-monospace, "SF Mono", Menlo, monospace;
-  letter-spacing: 0.32em;
-  cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.45),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
-    0 8px 24px rgba(0, 0, 0, 0.5),
-    0 2px 6px rgba(0, 0, 0, 0.4);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  width: 100%;
   z-index: 3;
 }
 .draw-reveal-cta:hover { filter: brightness(1.06); }
@@ -5875,6 +5832,12 @@ body.is-embedded .phone-status-bar {
   bottom: max(22px, calc(env(safe-area-inset-bottom, 0px) + 18px));
   z-index: 14;
   pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+/* Once every collectible is opened (finale), fade the gauge out before the
+   Continue button appears. */
+.att-gauge[data-hidden="true"] {
+  opacity: 0;
 }
 .att-gauge-track {
   display: flex;

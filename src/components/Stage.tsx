@@ -105,9 +105,12 @@ interface StageProps {
    *  moment the reveal completes, so the album-close can fly those exact assets
    *  from the shelf into the book pages. Fired just before onComplete. */
   onShelfCaptured?: (items: ShelfFlyItem[]) => void
+  /** Fired once the finale lands (every collectible opened/stored), before the
+   *  Continue button appears — lets the host dismiss the streaming gauge. */
+  onFinale?: () => void
 }
 
-export default function Stage({ frameRef, streamSettled = false, onComplete, onShelfCaptured }: StageProps) {
+export default function Stage({ frameRef, streamSettled = false, onComplete, onShelfCaptured, onFinale }: StageProps) {
   // 10 placeholder cards rendered upfront — always. Each placeholder gets
   // populated in-place when its attestation arrives via
   // window.pushAttestation (see the subscriber effect below). Slots that
@@ -168,6 +171,8 @@ export default function Stage({ frameRef, streamSettled = false, onComplete, onS
   // can snapshot the shelf with the latest closure.
   const onShelfCapturedRef = useRef(onShelfCaptured)
   useEffect(() => { onShelfCapturedRef.current = onShelfCaptured }, [onShelfCaptured])
+  const onFinaleRef = useRef(onFinale)
+  useEffect(() => { onFinaleRef.current = onFinale }, [onFinale])
 
   const cardRefs = useRef<Record<number, OrbApi>>({})
   const slotRef = useRef<SlotGridApi>(null)
@@ -608,6 +613,9 @@ export default function Stage({ frameRef, streamSettled = false, onComplete, onS
       sfx.play('finale')
       haptic.play('finale')
       setFinaleVisible(true)
+      // Every collectible is now opened/stored — let the host dismiss the
+      // streaming gauge ahead of the Continue button (1.5s below).
+      onFinaleRef.current?.()
       // Continue button appears 1.5s after the finale so the celebration
       // beat lands before the CTA arrives. Held in a ref (not cleared here)
       // so it survives a done→viewing→done round-trip; the unmount effect
@@ -1251,7 +1259,7 @@ export default function Stage({ frameRef, streamSettled = false, onComplete, onS
         {continueVisible && seqPhase !== 'viewing' && onComplete && (
           <button
             type="button"
-            className="stage-continue"
+            className="stage-continue cta-primary"
             onClick={fireComplete}
           >
             Continue

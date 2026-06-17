@@ -77,7 +77,7 @@ export default function DoneScreen({ nextGameHint, won }: DoneScreenProps) {
       </h1>
       {won && <div className="done-sub">See you next week.</div>}
       {!won && nextGameHint && <div className="done-hint">{nextGameHint}</div>}
-      <button type="button" className="done-cta" onClick={handleDone}>
+      <button type="button" className="done-cta cta-primary" onClick={handleDone}>
         Done
       </button>
     </div>

@@ -23,9 +23,11 @@ interface NFTRevealScreenProps {
   onContinue: () => void
   /** Forwarded to Stage — the shelf snapshot for the album-close fly. */
   onShelfCaptured?: (items: ShelfFlyItem[]) => void
+  /** Forwarded to Stage — fires when the reveal finale lands (all opened). */
+  onFinale?: () => void
 }
 
-export default function NFTRevealScreen({ frameRef, streamSettled, onContinue, onShelfCaptured }: NFTRevealScreenProps) {
+export default function NFTRevealScreen({ frameRef, streamSettled, onContinue, onShelfCaptured, onFinale }: NFTRevealScreenProps) {
   useEffect(() => {
     // count = on-shelf attestations received so far (no known total upfront;
     // off-shelf indices are dropped by the shelf, so they don't count here).
@@ -37,6 +39,7 @@ export default function NFTRevealScreen({ frameRef, streamSettled, onContinue, o
       frameRef={frameRef}
       streamSettled={streamSettled}
       {...(onShelfCaptured ? { onShelfCaptured } : {})}
+      {...(onFinale ? { onFinale } : {})}
       onComplete={() => {
         sendFlowEvent({ type: 'flow.nft_reveal_complete' })
         onContinue()
