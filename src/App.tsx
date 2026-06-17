@@ -6,14 +6,16 @@ import PrizeDrawScreen from './screens/PrizeDrawScreen'
 import NFTRevealScreen from './screens/NFTRevealScreen'
 import UsernameCTAScreen from './screens/UsernameCTAScreen'
 import HandoffScreen from './screens/HandoffScreen'
-import AwaitingVerdictScreen from './screens/AwaitingVerdictScreen'
 import NoAttestationsScreen from './screens/NoAttestationsScreen'
 import DoneScreen from './screens/DoneScreen'
 import BootErrorScreen from './screens/BootErrorScreen'
+import AlbumClose from './components/AlbumClose'
+import AttestationGauge from './components/AttestationGauge'
 import ErrorBoundary from './components/ErrorBoundary'
 import { readInitialInput, subscribeInput } from './bridge/input'
 import { subscribeAvailability } from './bridge/availability'
 import { resetAttestations, subscribeAttestations, onShelfAttestationCount } from './bridge/attestations'
+import { resolveAttestationAsset } from './attestations/resolver'
 import { SHELF_SIZE } from './components/Stage'
 import { subscribeOutcome, readBufferedOutcome, resetOutcome } from './bridge/outcome'
 import { sendFlowEvent } from './bridge/send'
@@ -21,6 +23,7 @@ import { fetchDisplayName } from './bridge/fetchName'
 import type { GameResultsInput, GameOutcome, UsernameAvailability } from './bridge/types'
 import { DEV_MOCKS } from './devMocks'
 import { setReducedMotionOverride } from './anim/easings'
+import type { ShelfFlyItem } from './anim/shelfFly'
 
 // Dev-mode helper: simulate native streaming attestations into the webview
 // after a mock is loaded, then firing setGameOutcome the way native would
@@ -52,34 +55,18 @@ const BOOT_TIMEOUT_MS = 30_000
 const STALL_QUIET_MS = 9_000
 const REVEAL_CAP_MS = 45_000
 
-// "Tallying your results…" hold. After a no-outcome reveal we wait BRIEFLY for
-// a late-landing verdict, then fall back to the Pocket handoff. Tuned from the
-// debug-log timeline rather than a flat guess:
-//   • A genuine PASS resolves almost instantly once the streamed count crosses
-//     the threshold — native fires setGameOutcome within ~70ms of the 6th
-//     collectible (logs: 6th matched 15:32:35.240 → outcome eval 15:32:35.312).
-//   • Collectibles stream in close together; the largest gap between two
-//     consecutive arrivals in the field logs was ~5s. And the reveal only
-//     reaches this screen AFTER the stream already went quiet (STALL_QUIET_MS)
-//     or hit the cap — so by here the stream is usually already finished.
-//
-// So instead of one long timer (the old 20s, which just trapped sub-threshold
-// players staring at the spinner — the field "stuck" report), hold a short
-// ACTIVITY-AWARE window: a fresh collectible push means the stream is still
-// alive and a threshold-cross may be imminent, so re-arm the quiet timer; once
-// the stream is silent (the common case) hand off promptly. A hard cap keeps
-// even an active-but-never-passing stream from ever feeling stuck. The handoff
-// is the designed no-outcome terminal and still routes back to the verdict if a
-// late pass lands before dismissal (see the handoff effect below) — so a quick
-// fall-back can never *lose* an outcome. The verdict, whenever it arrives,
-// routes straight to results via `outcome`. A manual "Check your Pocket" escape
-// appears sooner still (see AwaitingVerdictScreen).
-const AWAIT_VERDICT_QUIET_MS = 6_000   // hand off this long after the last collectible arrives
-const AWAIT_VERDICT_MAX_MS = 12_000    // absolute cap, even while collectibles keep trickling
+// NOTE: the old "Tallying your results…" (awaiting_verdict) hold is gone. Once
+// the reveal finishes, the album-close beat ("Added to your Pocket") gives the
+// collectibles their closure — there's no reason to park the user on a verdict
+// spinner. By the time the reveal settles a genuine pass has almost always
+// already resolved (native fires setGameOutcome within ~70ms of the count
+// crossing the threshold — see the debug-log timeline), so album-close routes
+// straight to the verdict if it's resolved, else to the handoff (which still
+// routes back to results if a late pass lands before dismissal).
 
 type Screen =
   | 'boot' | 'boot_error' | 'chest' | 'nft_reveal' | 'results'
-  | 'prize_draw' | 'username_cta' | 'awaiting_verdict'
+  | 'prize_draw' | 'username_cta' | 'album_close'
   | 'no_attestations' | 'handoff' | 'done'
 
 // The collectibles reveal is the FIRST beat (after the chest) so it can
@@ -105,11 +92,11 @@ function synthOutcome(input: GameResultsInput): GameOutcome | null {
   }
 }
 
-// After the reveal: the verdict if the outcome resolved, else WAIT for it on
-// the awaiting-verdict screen (which falls back to the Pocket handoff after a
-// short, activity-aware wait).
-function nextAfterReveal(outcome: GameOutcome | null): Screen {
-  return outcome ? 'results' : 'awaiting_verdict'
+// After the album-close: the verdict if the outcome resolved, else the Pocket
+// handoff. (A late pass still routes the handoff back to results — see the
+// handoff effect below — so withholding here never loses an outcome.)
+function nextAfterAlbum(outcome: GameOutcome | null): Screen {
+  return outcome ? 'results' : 'handoff'
 }
 function nextAfterVerdict(outcome: GameOutcome | null): Screen {
   // New members claim their username RIGHT AFTER the membership-unlocked
@@ -166,6 +153,19 @@ export default function App() {
   })
   // The reveal stops waiting for more cards (enables the finale) once true.
   const [streamSettled, setStreamSettled] = useState(false)
+  // Resolved collectible image URLs by slot index, accumulated from the
+  // attestation stream — the SAME art the reveal shows. Feeds the album-close
+  // beat so the album pages show the user's real collectibles.
+  const [collectibleSrcs, setCollectibleSrcs] = useState<string[]>([])
+  // Accumulator state behind collectibleSrcs, held in refs (not effect-local)
+  // so a fresh dev session can clear it — see startMockSession. byIndex maps a
+  // slot index → resolved URL; seen dedupes native re-pushes by hash.
+  const collectibleByIndex = useRef<Map<number, string>>(new Map())
+  const collectibleSeen = useRef<Set<string>>(new Set())
+  // Shelf badge rects captured at reveal-end (by Stage) so the album-close can
+  // fly those exact assets from the shelf into the book pages. Latest snapshot
+  // wins; AlbumClose reads it once on mount.
+  const shelfFlyRef = useRef<ShelfFlyItem[]>([])
   // Lets the user X out the dev panel for this session — reloading restores it.
   const [devPanelOpen, setDevPanelOpen] = useState(true)
   // Dev-only: force the reduced-motion path on/off without touching OS settings.
@@ -377,28 +377,30 @@ export default function App() {
     setScreen('no_attestations')
   }, [screen, streamSettled])
 
-  // Awaiting-verdict: after the reveal with no resolved outcome, hold on the
-  // "tallying results" screen. Route to the verdict the instant it lands; else
-  // fall back to the Pocket handoff on a short, activity-aware timer (see the
-  // AWAIT_VERDICT_* notes above). Each fresh collectible push re-arms the quiet
-  // window so a late threshold-cross still surfaces the verdict; a hard cap
-  // bounds the total wait. (The screen also offers a manual "Check your Pocket"
-  // escape → handoff, see its onSkip.)
+  // Accumulate resolved collectible image URLs (by slot index) from the
+  // attestation stream so the album-close pages show the SAME art the reveal
+  // just showed. subscribeAttestations replays buffered pushes on subscribe, so
+  // mounting once here rebuilds the set from whatever has already arrived, then
+  // tracks new arrivals. Deduped by hash so native re-pushes don't re-resolve.
   useEffect(() => {
-    if (screen !== 'awaiting_verdict') return
-    if (outcome) { setScreen('results'); return }
-    const toHandoff = () => setScreen('handoff')
-    const hardCap = window.setTimeout(toHandoff, AWAIT_VERDICT_MAX_MS)
-    let quiet = window.setTimeout(toHandoff, AWAIT_VERDICT_QUIET_MS)
-    // A new push = stream still alive, verdict possibly imminent → re-arm the
-    // quiet window (still bounded by hardCap). subscribeAttestations replays
-    // buffered pushes synchronously here, which simply (re)arms it once.
-    const off = subscribeAttestations(() => {
-      window.clearTimeout(quiet)
-      quiet = window.setTimeout(toHandoff, AWAIT_VERDICT_QUIET_MS)
+    const byIndex = collectibleByIndex.current
+    const seen = collectibleSeen.current
+    let cancelled = false
+    const off = subscribeAttestations((payload) => {
+      if (seen.has(payload.hash)) return
+      seen.add(payload.hash)
+      resolveAttestationAsset(payload.hash)
+        .then(({ url }) => {
+          if (cancelled) return
+          byIndex.set(payload.index, url)
+          setCollectibleSrcs(
+            [...byIndex.entries()].sort((a, b) => a[0] - b[0]).map(([, u]) => u)
+          )
+        })
+        .catch(() => { /* best-effort; the reveal handles its own asset errors */ })
     })
-    return () => { window.clearTimeout(hardCap); window.clearTimeout(quiet); off() }
-  }, [screen, outcome])
+    return () => { cancelled = true; off() }
+  }, [])
 
   // Route out of the terminal handoff if the outcome resolves before the user
   // dismisses it. The handoff is the long-wait fallback when the reveal
@@ -421,12 +423,15 @@ export default function App() {
       setScreen('nft_reveal')
     } else if (screen === 'nft_reveal') {
       // Zero attestations → the "not human enough" exit (definitive skunk);
-      // otherwise the verdict if resolved, else the awaiting-verdict wait.
+      // otherwise close the album ("Added to your Pocket") around the
+      // just-collected items, which then routes on to the verdict / handoff.
       if (onShelfAttestationCount(SHELF_SIZE) === 0) {
         setScreen('no_attestations')
       } else {
-        setScreen(nextAfterReveal(outcome))
+        setScreen('album_close')
       }
+    } else if (screen === 'album_close') {
+      setScreen(nextAfterAlbum(outcome))
     } else if (screen === 'results') {
       setScreen(nextAfterVerdict(outcome))
     } else if (screen === 'username_cta') {
@@ -486,6 +491,12 @@ export default function App() {
   function startMockSession(upfront: GameResultsInput): void {
     resetAttestations()
     resetOutcome()
+    // Drop the previous run's collectibles so they can't bleed into the album
+    // pages of the next scenario (resetAttestations keeps our subscription, but
+    // the accumulator is ours to clear).
+    collectibleByIndex.current.clear()
+    collectibleSeen.current.clear()
+    setCollectibleSrcs([])
     setInput(upfront)
     setOutcome(null)
     setStreamSettled(false)
@@ -605,8 +616,11 @@ export default function App() {
             frameRef={frameRef}
             streamSettled={streamSettled}
             onContinue={advance}
+            onShelfCaptured={(items) => { shelfFlyRef.current = items }}
           />
         )}
+        {/* Lower-left gauge: how many collectibles have streamed in so far. */}
+        {screen === 'nft_reveal' && <AttestationGauge />}
         {screen === 'results' && outcome && (
           <ResultsScreen
             outcome={outcome}
@@ -636,8 +650,8 @@ export default function App() {
             onContinue={advance}
           />
         )}
-        {screen === 'awaiting_verdict' && (
-          <AwaitingVerdictScreen onSkip={() => setScreen('handoff')} />
+        {screen === 'album_close' && (
+          <AlbumClose srcs={collectibleSrcs} fromRects={shelfFlyRef.current} onDone={advance} />
         )}
         {screen === 'no_attestations' && (
           <NoAttestationsScreen onDone={() => sendFlowEvent({ type: 'flow.complete' })} />

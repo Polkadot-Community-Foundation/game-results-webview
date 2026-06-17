@@ -16,6 +16,7 @@ import { subscribeAttestations } from '../bridge/attestations'
 import { resolveAttestationAsset } from '../attestations/resolver'
 import { revealSpawn, revealBurst, revealChargeCancel } from '../reveal3d/revealTimeline'
 import { cardStore } from '../anim/cardStore'
+import type { ShelfFlyItem } from '../anim/shelfFly'
 import { sfx } from '../audio/engine'
 import { haptic } from '../haptics/engine'
 import { prefersReducedMotion } from '../anim/easings'
@@ -100,9 +101,13 @@ interface StageProps {
   streamSettled?: boolean
   /** Called once the user dismisses the finale (Continue tap). */
   onComplete?: () => void
+  /** Snapshot of the filled shelf badges (image + on-screen rect) taken at the
+   *  moment the reveal completes, so the album-close can fly those exact assets
+   *  from the shelf into the book pages. Fired just before onComplete. */
+  onShelfCaptured?: (items: ShelfFlyItem[]) => void
 }
 
-export default function Stage({ frameRef, streamSettled = false, onComplete }: StageProps) {
+export default function Stage({ frameRef, streamSettled = false, onComplete, onShelfCaptured }: StageProps) {
   // 10 placeholder cards rendered upfront — always. Each placeholder gets
   // populated in-place when its attestation arrives via
   // window.pushAttestation (see the subscriber effect below). Slots that
@@ -159,6 +164,10 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
   // latest closure (NFTRevealScreen passes a fresh arrow each render).
   const onCompleteRef = useRef(onComplete)
   useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
+  // Same mirroring for the shelf-capture callback so the fail-safe timer below
+  // can snapshot the shelf with the latest closure.
+  const onShelfCapturedRef = useRef(onShelfCaptured)
+  useEffect(() => { onShelfCapturedRef.current = onShelfCaptured }, [onShelfCaptured])
 
   const cardRefs = useRef<Record<number, OrbApi>>({})
   const slotRef = useRef<SlotGridApi>(null)
@@ -378,6 +387,9 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
         }
         return next
       })
+      // Snapshot whatever's on the shelf before handing off (the just-queued
+      // setFilled may not be in the DOM yet — capture takes what's rendered).
+      onShelfCapturedRef.current?.(captureShelf())
       onCompleteRef.current?.()
     }, FAILSAFE_IDLE_MS)
     return () => window.clearTimeout(t)
@@ -404,11 +416,40 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     })
   }, [collectAllActive, readySlots, cards])
 
+  // Snapshot every filled shelf badge's image + on-screen rect so the
+  // album-close can fly those exact assets into the book pages. Read straight
+  // off the live DOM (the badge <img> inside each slot) while the shelf is
+  // still mounted — must run BEFORE onComplete unmounts this screen.
+  function captureShelf(): ShelfFlyItem[] {
+    const api = slotRef.current
+    if (!api) return []
+    const out: ShelfFlyItem[] = []
+    const f = filledRef.current
+    for (let i = 0; i < SHELF_SIZE; i++) {
+      const src = f[i]
+      if (!src) continue
+      const slot = api.getSlotEl(i)
+      if (!slot) continue
+      const badge = (slot.querySelector('.slot-badge') as HTMLElement | null) ?? slot
+      const r = badge.getBoundingClientRect()
+      if (r.width === 0 || r.height === 0) continue
+      out.push({ src, left: r.left, top: r.top, width: r.width, height: r.height })
+    }
+    return out
+  }
+
+  // Capture the shelf, THEN hand off — order matters (capture needs the shelf
+  // still in the DOM). Used by every completion path.
+  function fireComplete(): void {
+    onShelfCaptured?.(captureShelf())
+    onComplete?.()
+  }
+
   function handleStuckContinue(): void {
     // User chose to bail. onComplete fires the nft_reveal_complete
     // event from the caller (NFTRevealScreen wraps Stage).
     setStuckOverlayVisible(false)
-    if (onComplete) onComplete()
+    fireComplete()
   }
 
   // Collect-All snap-fills whatever has resolved so far — the total is
@@ -1211,7 +1252,7 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
           <button
             type="button"
             className="stage-continue"
-            onClick={onComplete}
+            onClick={fireComplete}
           >
             Continue
           </button>

@@ -5677,3 +5677,228 @@ body.is-embedded .phone-status-bar {
 @media (prefers-reduced-motion: reduce) {
   .infotip-overlay, .infotip-card { animation: none !important; }
 }
+
+/* ---------- Album-close sequence (Figma 161:3292) ----------
+   The collected items as an OPEN album spread (collection on the right page,
+   the front cover laid open on the left), then the cover swings shut about the
+   left spine to a centred closed album. Inside pages = the user's real
+   collectibles; outer cover = the designer's collage (AlbumCover). */
+.album-close {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: #141023;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1500px;
+  perspective-origin: 50% 50%;
+  opacity: 0;
+}
+/* Owns scale + the x-shift that keeps the open spread (then the closed
+   book) centred. */
+.album-stage {
+  position: relative;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+/* Headline shown once the album is closed. */
+.album-done-title {
+  position: absolute;
+  top: max(104px, calc(env(safe-area-inset-top, 0px) + 64px));
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0 24px;
+  font-family: var(--font-title, 'Mulish'), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 40px;
+  line-height: 48px;
+  letter-spacing: -0.01em;
+  text-align: center;
+  color: #fff;
+}
+/* Continue CTA — shared blue gradient, pinned to the bottom. */
+.album-done-cta {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: max(calc(env(safe-area-inset-bottom, 0px) + 16px), 34px);
+  height: 56px;
+  border: none;
+  border-radius: 16px;
+  font-family: var(--font-title, 'Mulish'), system-ui, sans-serif;
+  font-weight: 1000;
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: 0.44px;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(180deg, #3b62fa 0%, #343fb7 52%, #543ca5 100%);
+  text-shadow: 0 1px 2px rgba(15, 25, 80, 0.55);
+  box-shadow:
+    0 0 16px rgba(14, 15, 64, 0.85),
+    0 8px 24px rgba(59, 98, 250, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.28);
+}
+.album-done-cta:active { transform: scale(0.98); }
+/* One page = the closed-book footprint. */
+.album {
+  position: relative;
+  width: 180px;
+  height: 240px;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+/* Collection page — the base (the right page when the book is open). */
+.album-page-grid {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #16223f 0%, #0d152b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+/* Front cover — overlays the collection, hinged at the LEFT spine. */
+.album-cover {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center; /* spine = left edge */
+  transform-style: preserve-3d;
+}
+.album-cover-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+/* Inside of the front cover — shown while the album is open. */
+.album-cover-face--inner {
+  transform: rotateY(180deg);
+  background: linear-gradient(180deg, #16223f 0%, #0d152b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+/* Outer cover art — revealed as the book closes. */
+.album-cover-face--outer {
+  background: #323232;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+/* Collage cover — graphite gradient + stickers + title. */
+.album-cover-art {
+  position: absolute;
+  inset: 0;
+  container-type: inline-size;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(180deg, #3d3d3d 0%, #323232 100%);
+}
+.album-cover-art-sticker {
+  position: absolute;
+  aspect-ratio: 1;
+  object-fit: contain;
+  /* Match the muted, near-monochrome look of the cover render. */
+  filter: grayscale(0.85) brightness(0.92) contrast(1.05);
+  pointer-events: none;
+}
+.album-cover-art-title {
+  position: absolute;
+  left: 7.7%;
+  top: 6.6%;
+  transform: translateY(-50%);
+  z-index: 2;
+  font-family: 'Marcellus', 'Times New Roman', serif;
+  font-weight: 400;
+  font-size: 7.7cqw;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #8a8a8a;
+  text-shadow: 0 0.3px 0.2px #c8c8c8, 0 -0.3px 0.3px #1b1b1b;
+}
+/* Thin inner rim — the hard-light outline from the cover render. */
+.album-cover-art-rim {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  border: 1px solid rgba(185, 185, 185, 0.5);
+  mix-blend-mode: hard-light;
+  pointer-events: none;
+}
+/* Each page holds half the collection — centred so the odd last item is
+   never clipped. */
+.album-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px;
+  width: 100%;
+  height: 100%;
+  align-content: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.album-cell {
+  width: 54px;
+  height: 54px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
+}
+/* Shared-element fly layer — clones of the shelf badges animate across this
+   flat overlay (NOT inside the scaled/3D book) into the album page cells, then
+   remove themselves on landing. Sits above the open book; coords are relative
+   to .album-close, matching the viewport rects captured from the shelf. */
+.album-fly-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.album-fly-badge {
+  position: absolute;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
+  will-change: transform;
+}
+
+/* ---------- Attestation gauge (lower-left HUD) ----------
+   A segmented bar showing how many collectibles have streamed in from native
+   so far — the visual replacement for a numeric "X / N" readout. One segment
+   per shelf slot; arrived slots light up blue as they land. */
+.att-gauge {
+  position: absolute;
+  left: max(16px, calc(env(safe-area-inset-left, 0px) + 14px));
+  bottom: max(22px, calc(env(safe-area-inset-bottom, 0px) + 18px));
+  z-index: 14;
+  pointer-events: none;
+}
+.att-gauge-track {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 7px 9px;
+  border-radius: 11px;
+  background: rgba(12, 14, 32, 0.46);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.att-gauge-seg {
+  width: 4px;
+  height: 15px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background 0.35s ease, box-shadow 0.35s ease;
+}
+.att-gauge-seg.is-filled {
+  background: linear-gradient(180deg, #8fb6ff 0%, #3b62fa 100%);
+  box-shadow: 0 0 8px rgba(59, 98, 250, 0.75);
+}
+@media (prefers-reduced-motion: reduce) {
+  .att-gauge-seg { transition: none; }
+}
