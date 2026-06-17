@@ -128,12 +128,12 @@ export default function ChestScreen({ onOpen }: ChestScreenProps) {
       <div className="chest-pattern-bg" aria-hidden="true" />
 
       <header className="chest-header">
-        <div className="chest-eyebrow">Game complete</div>
-        <h1 className="chest-title">See what prizes you got</h1>
-        <p className="chest-sub">
-          The better you played, the more you collected. Plus, find out if
-          you've become a member with a prize draw.
-        </p>
+        {/* Designer-demo headline (the old "Game complete" eyebrow folded into
+            the accented first phrase). */}
+        <h1 className="chest-title">
+          <span className="chest-title-accent">Game complete.</span><br />
+          Claim your prizes.
+        </h1>
       </header>
 
       <button
@@ -155,6 +155,40 @@ export default function ChestScreen({ onOpen }: ChestScreenProps) {
 
       <div className="chest-cta" data-ready={openable ? 'true' : 'false'} aria-live="polite">
         {openable ? 'Tap to open' : 'Securing your collectibles…'}
+      </div>
+
+      {/* What's inside, grouped by who gets it — "Everyone" (collectables) and
+          "Members only" (membership + prize draw). Icons use this repo's
+          assets. */}
+      <div className="chest-tiers" aria-hidden="true">
+        <section className="chest-tier">
+          <span className="chest-tier-head">Everyone</span>
+          <div className="chest-tier-items">
+            <div className="chest-tier-item">
+              <span className="chest-tier-icon">
+                <img src="./assets/badges/01.webp" alt="" draggable={false} />
+              </span>
+              <span className="chest-tier-label">Collectables</span>
+            </div>
+          </div>
+        </section>
+        <section className="chest-tier">
+          <span className="chest-tier-head">Members only</span>
+          <div className="chest-tier-items">
+            <div className="chest-tier-item">
+              <span className="chest-tier-icon chest-tier-icon--card">
+                <img src="./assets/membership-card.webp" alt="" draggable={false} />
+              </span>
+              <span className="chest-tier-label">Membership</span>
+            </div>
+            <div className="chest-tier-item">
+              <span className="chest-tier-icon">
+                <img src="./assets/golden_ticket.webp" alt="" draggable={false} />
+              </span>
+              <span className="chest-tier-label">Prize Draw</span>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   )

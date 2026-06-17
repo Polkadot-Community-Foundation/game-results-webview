@@ -3243,32 +3243,34 @@ button:disabled { cursor: default; }
   height: 210px;
   max-width: calc(100vw - 56px);
   border-radius: 16px;
-  background:
-    linear-gradient(155deg,
-      #ffffff 0%,
-      #fafafd 40%,
-      #f0eff4 100%);
+  /* Dark placeholder behind the card art while it loads. */
+  background: #0d152b;
   box-shadow:
     0 14px 30px rgba(0, 0, 0, 0.45),
     0 2px 4px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 0 rgba(80, 70, 100, 0.18);
-  color: #1a1430;
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18);
   overflow: hidden;
-  padding: 18px 20px 16px;
   /* The smash entrance animates transform aggressively (scale + y +
-     rotation). `will-change` promotes the card to its own GPU layer
-     so the compositor doesn't repaint the burst behind it each frame.
-     `backface-visibility: hidden` is a belt-and-suspenders layer
-     hint for older mobile browsers. `contain: paint` isolates the
-     card's own subtree (polka pattern, name) from
-     sibling repaints. The CSS transform stays simple (just rotate);
-     GSAP composes its scale/y/rotation animation on top. */
+     rotation). `will-change` promotes the card to its own GPU layer so the
+     compositor doesn't repaint the burst behind it each frame.
+     `backface-visibility: hidden` is a belt-and-suspenders layer hint for
+     older mobile browsers. `contain: paint` isolates the card's subtree from
+     sibling repaints. The CSS transform stays simple (just rotate); GSAP
+     composes its scale/y/rotation animation on top. */
   transform: rotate(-1.2deg);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   will-change: transform, opacity;
   contain: paint;
+}
+/* The iridescent Polkadot card artwork, filling the card frame. */
+.member-card-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .member-card-pattern {
   position: absolute;
@@ -4602,10 +4604,14 @@ button:disabled { cursor: default; }
   color: var(--gold, #f6c869); opacity: 0.92;
 }
 .chest-title {
-  margin: 8px 0 0;
+  /* Matches the designer demo's chest title — 40/48 hero, no margin. */
+  margin: 0;
   font-family: var(--font-title, 'Mulish'), system-ui, sans-serif;
-  font-weight: 900; font-size: 26px; line-height: 1.1;
+  font-weight: 900; font-size: 40px; line-height: 48px;
+  color: #fff;
 }
+/* Gold first phrase ("Game complete.") — matches the designer demo. */
+.chest-title-accent { color: var(--gold, #f6c869); }
 .chest-sub {
   margin: 10px 0 0; font: 13px/1.5 var(--font-ui), system-ui, sans-serif;
   color: rgba(225, 222, 255, 0.7);
@@ -4637,12 +4643,96 @@ button:disabled { cursor: default; }
 .chest[data-openable="true"] .chest-glow { animation: chestReadyPulse 1.6s ease-in-out infinite; }
 @keyframes chestReadyPulse { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
 .chest-cta {
+  /* Match the reveal shelf's tap prompt (.action-label): big white bold with a
+     soft blue glow, in the inherited UI font (not the old uppercase mono). The
+     "Securing…" loading state sits dimmed; it brightens to full white once the
+     chest is tappable. */
   position: relative; z-index: 2; min-height: 20px;
-  font: 800 13px/1 ui-monospace, "SF Mono", Menlo, monospace;
-  letter-spacing: 0.18em; text-transform: uppercase;
-  color: rgba(225, 222, 255, 0.55); transition: color 0.3s ease;
+  text-align: center;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.55),
+    0 0 20px rgba(130, 180, 255, 0.25);
+  opacity: 0.55;
+  transition: opacity 0.3s ease;
 }
-.chest-cta[data-ready="true"] { color: var(--gold, #f6c869); }
+.chest-cta[data-ready="true"] { opacity: 1; }
+
+/* ── Reward tiers (what's inside the chest) ───────────────────────────────
+   Two grouped cards per the designer layout: "Everyone" (collectables) and
+   "Members only" (membership + prize draw). Card header on top, a circular
+   icon per item, label beneath. The right card holds two items so it reads
+   wider, like the reference. */
+.chest-tiers {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 10px;
+}
+.chest-tier {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+}
+.chest-tier-head {
+  font-family: var(--font-ui), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.7);
+}
+.chest-tier-items {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.chest-tier-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 80px;
+}
+.chest-tier-icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  overflow: hidden;
+}
+.chest-tier-icon img {
+  width: 74%;
+  height: 74%;
+  object-fit: contain;
+}
+/* Card-style icon (e.g. the membership card from the iOS app) — a landscape
+   card, so fill the ring rather than letterboxing it tiny. */
+.chest-tier-icon--card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.chest-tier-label {
+  font-family: var(--font-ui), system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.88);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chest[data-openable="true"] .chest-glow { animation: none; }
 }
