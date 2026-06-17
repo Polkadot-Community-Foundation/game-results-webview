@@ -82,17 +82,25 @@ const USER_Y_PER_DISTANCE = 2
  *  the band and user visually distinct. */
 const MIN_USER_BEHIND_BAND = 600
 
+/** Cap on the lane-space offset ticketDistance can add behind the band. An
+ *  enormous pool (or a real chain ticketDistance in the millions) would
+ *  otherwise drive the user's Y to millions of lane units — and the middle
+ *  tile-bg div spans that whole gap, producing a multi-million-px element.
+ *  The camera scroll-back length is already clamped to its max (~3.5s) well
+ *  before this, so depth beyond the cap was never visible anyway. */
+const MAX_USER_DISTANCE_Y = 12_000
+
 /** Y position of the user's ticket on a loss. Lane is always 1
  *  (middle) so the camera can keep the user centered. Y scales with
- *  ticketDistance so the spatial layout reflects how far the user
- *  actually was. */
+ *  ticketDistance (clamped, see MAX_USER_DISTANCE_Y) so the spatial layout
+ *  reflects how far the user was without exploding the tile-bg size. */
 export function getUserLossPosition(ticketDistance: number, winnerCount: number): LanePosition {
   const back = winnerBackY(winnerCount)
   const lane = 1 as const
   const y =
     back + laneStagger(lane)
     - MIN_USER_BEHIND_BAND
-    - Math.max(0, ticketDistance) * USER_Y_PER_DISTANCE
+    - Math.min(MAX_USER_DISTANCE_Y, Math.max(0, ticketDistance) * USER_Y_PER_DISTANCE)
   return { lane, y }
 }
 

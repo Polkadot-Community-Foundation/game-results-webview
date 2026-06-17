@@ -13,6 +13,8 @@ import { gsap } from 'gsap'
 import { prefersReducedMotion } from '../anim/easings'
 import { formatTicketLong } from './ticketDisplay'
 import type { DrawAssets } from './assets'
+import InfoTip from '../components/InfoTip'
+import { CONCEPTS } from '../copy/concepts'
 
 interface SealedStageProps {
   /** The user's ticket hash — used to render the friendly code stamp. */
@@ -81,14 +83,16 @@ export default function SealedStage({
     if (!ctaReady) return
     if (reduced) { onReveal(); return }
 
-    // Brief seal-break light-sweep across the ticket. Pure CSS
-    // gradient via the sealRef element — no asset.
+    // Brief seal-break light-sweep across the ticket. The band is a CSS
+    // gradient masked to the ticket silhouette; sweeping its
+    // background-position (rather than transforming the element) keeps the
+    // mask pixel-aligned with the ticket art behind it.
     const seal = sealRef.current
     if (seal) {
       gsap.fromTo(seal,
-        { opacity: 0, x: '-110%' },
+        { opacity: 1, backgroundPosition: '160% 0%' },
         {
-          opacity: 1, x: '110%',
+          opacity: 1, backgroundPosition: '-60% 0%',
           duration: 0.45, ease: 'power2.in',
           onComplete: () => { gsap.set(seal, { opacity: 0 }) }
         }
@@ -137,7 +141,8 @@ export default function SealedStage({
       <div className="draw-sealed-header">
         <div className="draw-sealed-eyebrow">Weekly Member Draw</div>
         <div className="draw-sealed-sub">
-          {winnerCount} winners
+          {winnerCount} winners drawn
+          {' '}<InfoTip title={CONCEPTS.prizeDraw.title} body={CONCEPTS.prizeDraw.body} label="How does the prize draw work?" />
         </div>
       </div>
 
@@ -158,7 +163,18 @@ export default function SealedStage({
               {formatTicketLong(userTicket)}
             </div>
           </div>
-          <div className="draw-sealed-ticket-seal" ref={sealRef} aria-hidden="true" />
+          <div
+            className="draw-sealed-ticket-seal"
+            ref={sealRef}
+            aria-hidden="true"
+            style={{
+              // Mask the sweep to the ticket's own silhouette (same asset as
+              // the ticket image) so the shine only crosses the ticket art,
+              // not the transparent corners of its bounding box.
+              WebkitMaskImage: `url(${assets.ticketLandscape})`,
+              maskImage: `url(${assets.ticketLandscape})`
+            }}
+          />
         </div>
       </div>
 
