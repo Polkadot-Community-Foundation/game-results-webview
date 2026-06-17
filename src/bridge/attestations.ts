@@ -69,8 +69,20 @@ export function resetAttestations(): void {
   listeners.clear()
 }
 
-/** Total attestations received so far. Read by the NFT reveal screen
- *  to gate stuck-overlay heuristics. */
+/** Total attestations received so far, across ALL indices (0..63). Note
+ *  this includes off-shelf indices the reveal never renders — use
+ *  onShelfAttestationCount for settle/render decisions. */
 export function bufferedAttestationCount(): number {
   return buffered.size
+}
+
+/** Count of buffered attestations whose index falls WITHIN the shelf
+ *  (0..shelfSize-1). The settle gate uses this — NOT bufferedAttestationCount
+ *  — because native can push indices up to 63, and the shelf drops anything
+ *  >= shelfSize. Counting off-shelf pushes would "settle" the reveal over an
+ *  empty shelf (e.g. ten pushes at indices 20-29). */
+export function onShelfAttestationCount(shelfSize: number): number {
+  let n = 0
+  for (const idx of buffered.keys()) if (idx < shelfSize) n++
+  return n
 }

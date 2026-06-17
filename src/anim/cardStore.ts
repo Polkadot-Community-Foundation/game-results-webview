@@ -95,28 +95,38 @@ export function cardStore({
     }
   })
 
-  // Slot pop — badge clicks into place
+  // Slot pop — badge clicks into place. slotEl may be null (the slot <div>
+  // hasn't mounted, or getSlotEl was out of range): gsap throws on a null
+  // target ("null is not an object (evaluating 't._gsap')" on iOS WebKit),
+  // which would bubble straight to the render ErrorBoundary and black-screen
+  // the whole results flow. Guard it — the badge-land SFX still fires.
   tl.call(() => sfx.play('badge-land'), undefined, '-=0.08')
-  tl.to(slotEl, {
-    scale: 1.25,
-    duration: 0.1,
-    ease: 'power2.out'
-  }, '-=0.08')
-  tl.to(slotEl, {
-    scale: 1,
-    duration: 0.34,
-    ease: EASE.settle
-  })
+  if (slotEl) {
+    tl.to(slotEl, {
+      scale: 1.25,
+      duration: 0.1,
+      ease: 'power2.out'
+    }, '-=0.08')
+    tl.to(slotEl, {
+      scale: 1,
+      duration: 0.34,
+      ease: EASE.settle
+    })
+  }
 
-  // Card dissolves in parallel: fade + dust + slight descent.
-  tl.to(root, {
-    opacity: 0,
-    y: 14,
-    scale: 0.96,
-    duration: 0.5,
-    ease: 'power2.in',
-    overwrite: 'auto'
-  }, 0)
+  // Card dissolves in parallel: fade + dust + slight descent. `root`
+  // (cardApi.root()) is typed nullable for the same reason — skip the tween
+  // rather than hand gsap a null target.
+  if (root) {
+    tl.to(root, {
+      opacity: 0,
+      y: 14,
+      scale: 0.96,
+      duration: 0.5,
+      ease: 'power2.in',
+      overwrite: 'auto'
+    }, 0)
+  }
 
   tl.call(() => {
     const { x, y } = cardApi.center()

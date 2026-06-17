@@ -21,20 +21,33 @@
 import { useEffect, useRef, useState } from 'react'
 import { gsap } from 'gsap'
 import MemberCard from '../components/MemberCard'
+import InfoTip from '../components/InfoTip'
 import { haptic } from '../haptics/engine'
 import { prefersReducedMotion } from '../anim/easings'
+import { CONCEPTS } from '../copy/concepts'
 import type { GameOutcome } from '../bridge/types'
+
+/** Resting opacity of the dimmed burst backdrop on the "Nice haul!" variant —
+ *  well below the celebration's 0.6 so it reads as a muted echo. */
+const HAUL_BG_OPACITY = 0.32
 
 interface ResultsScreenProps {
   outcome: GameOutcome
   /** The user's display name for the membership card (outcome-independent,
    *  so it comes from setGameResults, not the outcome). */
   displayName?: string
+  /** How many collectibles the player earned this game (on-shelf count from
+   *  the reveal). Drives the "you collected N" congratulation. */
+  collectedCount: number
   onContinue: () => void
 }
 
-export default function ResultsScreen({ outcome, displayName, onContinue }: ResultsScreenProps) {
+export default function ResultsScreen({ outcome, displayName, collectedCount, onContinue }: ResultsScreenProps) {
   const isCelebration = outcome.justBecameMember
+  // "Nice haul!" variant: failed the game but still earned collectibles. Gets
+  // a dimmed, desaturated take on the membership burst as a backdrop plus a
+  // forward nudge toward membership.
+  const isHaul = !outcome.passed && collectedCount > 0
   // Failure copy is uniform — the results screen no longer surfaces
   // rank/progression, so it doesn't distinguish how the player failed.
   const reduced = prefersReducedMotion()
@@ -42,6 +55,7 @@ export default function ResultsScreen({ outcome, displayName, onContinue }: Resu
   const rootRef = useRef<HTMLDivElement>(null)
   const celebrationHeadlineRef = useRef<HTMLHeadingElement>(null)
   const celebrationBgRef = useRef<HTMLImageElement>(null)
+  const haulBgRef = useRef<HTMLImageElement>(null)
   const burstRef = useRef<HTMLDivElement>(null)
   const summaryRef = useRef<HTMLDivElement>(null)
   const ctaRef = useRef<HTMLButtonElement>(null)
@@ -57,6 +71,9 @@ export default function ResultsScreen({ outcome, displayName, onContinue }: Resu
       gsap.set(els, { opacity: 1, y: 0, scale: 1 })
       if (celebrationBgRef.current) {
         gsap.set(celebrationBgRef.current, { opacity: 0.6, xPercent: -50, yPercent: -50 })
+      }
+      if (haulBgRef.current) {
+        gsap.set(haulBgRef.current, { opacity: HAUL_BG_OPACITY, xPercent: -50, yPercent: -50 })
       }
       setCtaReady(true)
       return
@@ -96,6 +113,16 @@ export default function ResultsScreen({ outcome, displayName, onContinue }: Resu
       }, 1.05)
     }
 
+    // Haul variant: the dimmed burst fades up gently behind the summary —
+    // a softer echo of the celebration, no scale punch or sparkle.
+    if (isHaul && haulBgRef.current) {
+      tl.fromTo(haulBgRef.current,
+        { opacity: 0, scale: 0.9, xPercent: -50, yPercent: -50 },
+        { opacity: HAUL_BG_OPACITY, scale: 1, duration: 0.85, ease: 'power2.out' },
+        0.1
+      )
+    }
+
     if (summaryRef.current) {
       tl.fromTo(summaryRef.current,
         { opacity: 0, y: 12 },
@@ -111,32 +138,40 @@ export default function ResultsScreen({ outcome, displayName, onContinue }: Resu
       )
     }
     return () => { tl.kill() }
-  }, [isCelebration, reduced])
+  }, [isCelebration, isHaul, reduced])
 
-  // Outcome copy — never exposes counts. Teases what's next so the
-  // user knows there's more to come (prize draw, collectibles, etc.).
+  // Outcome copy. Leads with the collectibles haul (count + congrats), then:
+  //   - for players heading into the prize draw, INTRODUCES it (so the draw
+  //     isn't a surprise), and
+  //   - for failed players, a forward nudge — NEVER a "you lost" framing.
+  //     "Not your week" / loss language is reserved for the prize-draw result
+  //     (ResultHero "no win this time"), which only people who actually saw
+  //     the draw reach.
   const passed = outcome.passed
-  const hasPrizeDraw = outcome.prizeDraw !== null
+  const goingToDraw = passed && outcome.prizeDraw !== null
+  const haul = collectedCount === 1 ? '1 collectible' : `${collectedCount} collectibles`
 
   let summaryHeadline: string
   let summarySub: string
   if (passed) {
-    if (outcome.justBecameMember) {
-      summaryHeadline = `Welcome, ${outcome.usernameClaim.previousUsername ?? 'member'}.`
-      summarySub = hasPrizeDraw
-        ? `Your first member prize draw is up next.`
-        : `Membership unlocked.`
-    } else {
-      summaryHeadline = `Nice run.`
-      summarySub = hasPrizeDraw
-        ? `Your prize draw is up next.`
-        : `See you next round.`
-    }
+    // Greet new members by display name (NOT previousUsername, the old
+    // candidate handle they're leaving behind).
+    summaryHeadline = outcome.justBecameMember
+      ? `Welcome, ${displayName ?? 'member'}.`
+      : `Nice run.`
+    summarySub = goingToDraw
+      ? `You collected ${haul}, and you've earned a spot in this week's prize draw.`
+      : `You collected ${haul}.`
+  } else if (collectedCount > 0) {
+    // Failed the game but earned collectibles — celebrate the haul, no loss
+    // framing. Membership-agnostic: this branch covers both candidates and
+    // existing members who didn't pass, and the outcome doesn't expose which.
+    summaryHeadline = `Nice haul!`
+    summarySub = `You collected ${haul}.`
   } else {
-    // Failed — uniform copy. The reveal already showed whatever collectibles
-    // they earned; the verdict doesn't distinguish how they fell short.
-    summaryHeadline = `Not your week.`
-    summarySub = `Better luck next round.`
+    // Failed with nothing this round — still no "you lost", just a nudge.
+    summaryHeadline = `Next time!`
+    summarySub = `Play and pass games to earn collectibles for your Pocket.`
   }
 
   return (
@@ -163,6 +198,20 @@ export default function ResultsScreen({ outcome, displayName, onContinue }: Resu
         </>
       )}
 
+      {/* Dimmed, desaturated echo of the membership burst — the same asset as
+          the celebration, muted via CSS filter + low opacity (see
+          .results-haul-bg). Sits behind the (cardless) haul summary. */}
+      {isHaul && (
+        <img
+          className="results-haul-bg"
+          ref={haulBgRef}
+          src="./assets/burst-rainbow.webp"
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+        />
+      )}
+
       {!isCelebration && (
         <header className="results-eyebrow">YOUR RESULTS</header>
       )}
@@ -187,7 +236,18 @@ export default function ResultsScreen({ outcome, displayName, onContinue }: Resu
 
       <div className="results-summary" ref={summaryRef}>
         <div className="results-summary-headline">{summaryHeadline}</div>
-        <div className="results-summary-sub">{summarySub}</div>
+        <div className="results-summary-sub">
+          {summarySub}
+          {outcome.justBecameMember && (
+            <>{' '}<InfoTip title={CONCEPTS.membership.title} body={CONCEPTS.membership.body} label="What is membership?" /></>
+          )}
+        </div>
+        {/* Forward nudge on the haul screen — points toward the membership
+            payoff. (Also surfaces to the rare existing-member-who-failed
+            case; the outcome contract can't currently distinguish them.) */}
+        {isHaul && (
+          <div className="results-haul-nudge">Keep playing to get your Membership!</div>
+        )}
       </div>
 
       <button

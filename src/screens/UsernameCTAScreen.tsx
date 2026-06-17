@@ -17,9 +17,13 @@
 //
 //   - undefined | 'unknown' → CAUTIOUS GENERIC. We don't know if the
 //     base name is free, so we don't celebrate the claimable name.
-//     Greets with the user's current handle ("Welcome, <previousUsername>.")
-//     Claiming happens in the Prizes chat. No claimable name shown, no
-//     suffix drop.
+//     Just the generic "Make it yours." title + claim-in-the-Prizes-chat
+//     note. No claimable name shown, no suffix drop.
+//
+// All three open with "Make it yours." rather than re-greeting — the results
+// screen already welcomed the new member a beat earlier (and by their display
+// name, not the candidate handle), so a second "Welcome, byteboro.42." here
+// was both redundant and confusing.
 //
 // Hard rule: the suffix-drop ceremony ONLY plays for `'available'`. If
 // availability is anything else (or absent), we celebrate membership
@@ -30,6 +34,8 @@ import { gsap } from 'gsap'
 import { sfx } from '../audio/engine'
 import { haptic } from '../haptics/engine'
 import { prefersReducedMotion } from '../anim/easings'
+import InfoTip from '../components/InfoTip'
+import { CONCEPTS } from '../copy/concepts'
 import type { UsernameAvailability } from '../bridge/types'
 
 interface UsernameCTAScreenProps {
@@ -42,6 +48,26 @@ interface UsernameCTAScreenProps {
   onContinue: () => void
 }
 
+type Variant = 'available' | 'taken' | 'cautious'
+
+// How long to wait for a late availability push before committing to the
+// cautious generic variant. The bridge contract (types.ts) documents that an
+// absent availability shows the cautious variant "after a short wait", and
+// native may push setUsernameAvailability(...) asynchronously — App also nudges
+// it via flow.username_availability_needed. Tunable.
+const AVAILABILITY_GRACE_MS = 1200
+
+/** Resolve the screen variant from availability + name. Returns null only when
+ *  we HAVE a name to celebrate but availability hasn't resolved yet — the
+ *  "wait a beat" case. With no name there's nothing to wait for, so we commit
+ *  to cautious immediately. */
+function decideVariant(a: UsernameAvailability | undefined, s: string | undefined): Variant | null {
+  if (a === 'available' && s) return 'available'
+  if (a === 'taken' && s) return 'taken'
+  if (!s) return 'cautious'
+  return null
+}
+
 export default function UsernameCTAScreen({
   availability,
   suggestedUsername,
@@ -49,18 +75,25 @@ export default function UsernameCTAScreen({
   alternatives,
   onContinue
 }: UsernameCTAScreenProps) {
-  // Pick the variant ONCE at mount — even if availability later changes
-  // we keep the originally rendered screen so animations don't restart.
-  // This avoids late-arriving 'available' triggering a ceremony AFTER
-  // we've already animated in the cautious variant.
-  const [variant] = useState<'available' | 'taken' | 'cautious'>(() => {
-    if (availability === 'available' && suggestedUsername) return 'available'
-    if (availability === 'taken' && suggestedUsername) return 'taken'
-    return 'cautious'
-  })
+  // Pick the variant, honoring the documented short wait: if we have a name to
+  // celebrate but availability hasn't resolved, hold briefly for a late push
+  // before falling back to cautious. Previously the variant locked at mount
+  // with ZERO wait, so an 'available' arriving 100ms later was ignored and the
+  // suffix-drop ceremony never played. Once committed we never switch — the
+  // original intent (don't restart animations on a late change) still holds.
+  const [variant, setVariant] = useState<Variant | null>(
+    () => decideVariant(availability, suggestedUsername)
+  )
+  useEffect(() => {
+    if (variant) return  // already committed — never switch
+    const decided = decideVariant(availability, suggestedUsername)
+    if (decided) { setVariant(decided); return }
+    const t = window.setTimeout(() => setVariant('cautious'), AVAILABILITY_GRACE_MS)
+    return () => window.clearTimeout(t)
+  }, [variant, availability, suggestedUsername])
 
   return (
-    <div className={`username-screen username-screen-${variant}`}>
+    <div className={`username-screen${variant ? ` username-screen-${variant}` : ''}`}>
       <div className="username-pattern-bg" aria-hidden="true" />
       {variant === 'available' && (
         <AvailableVariant
@@ -78,7 +111,7 @@ export default function UsernameCTAScreen({
         />
       )}
       {variant === 'cautious' && (
-        <CautiousVariant previousUsername={previousUsername} onNext={onContinue} />
+        <CautiousVariant onNext={onContinue} />
       )}
     </div>
   )
@@ -212,7 +245,7 @@ function AvailableVariant({ stem, previousUsername, onNext }: AvailableProps) {
   return (
     <>
       <h1 className="username-title" ref={titleRef}>
-        Welcome,<br />{previousUsername ?? 'member'}.
+        Make it yours.
       </h1>
       <div className="username-hint" ref={hintRef}>
         Time to drop the {suffix}.
@@ -227,6 +260,7 @@ function AvailableVariant({ stem, previousUsername, onNext }: AvailableProps) {
       </div>
       <div className="username-note" ref={noteRef}>
         You can claim your new username in the Prizes chat.
+        {' '}<InfoTip title={CONCEPTS.username.title} body={CONCEPTS.username.body} label="What's this username?" />
       </div>
       <button
         type="button"
@@ -317,7 +351,7 @@ function TakenVariant({ name, previousUsername, alternatives, onNext }: TakenPro
   return (
     <>
       <h1 className="username-title" ref={titleRef}>
-        Welcome,<br />{previousUsername ?? 'member'}.
+        Make it yours.
       </h1>
       <div className="username-taken-subhead" ref={subheadRef}>
         <span className="username-taken-name">{name}</span> is already claimed.
@@ -336,6 +370,7 @@ function TakenVariant({ name, previousUsername, alternatives, onNext }: TakenPro
       )}
       <div className="username-note" ref={noteRef}>
         You can claim your new username in the Prizes chat.
+        {' '}<InfoTip title={CONCEPTS.username.title} body={CONCEPTS.username.body} label="What's this username?" />
       </div>
       <button
         type="button"
@@ -355,11 +390,10 @@ function TakenVariant({ name, previousUsername, alternatives, onNext }: TakenPro
 // ────────────────────────────────────────────────────────────────────────
 
 interface CautiousProps {
-  previousUsername?: string
   onNext: () => void
 }
 
-function CautiousVariant({ previousUsername, onNext }: CautiousProps) {
+function CautiousVariant({ onNext }: CautiousProps) {
   const reduced = prefersReducedMotion()
 
   const titleRef = useRef<HTMLHeadingElement>(null)
@@ -397,10 +431,11 @@ function CautiousVariant({ previousUsername, onNext }: CautiousProps) {
   return (
     <>
       <h1 className="username-title" ref={titleRef}>
-        Welcome,<br />{previousUsername ?? 'member'}.
+        Make it yours.
       </h1>
       <div className="username-note username-note-cautious" ref={noteRef}>
         You can claim your new username in the Prizes chat.
+        {' '}<InfoTip title={CONCEPTS.username.title} body={CONCEPTS.username.body} label="What's this username?" />
       </div>
       <button
         type="button"

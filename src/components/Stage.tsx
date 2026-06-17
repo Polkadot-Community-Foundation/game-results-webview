@@ -87,7 +87,9 @@ function approxOrbImageRect(orbRect: DOMRect): BadgeRect {
 // passed fewer than 10 attestations, the empty slots stay visible as
 // placeholders for the ones they didn't earn. This reinforces "you
 // could have had up to 10" without making the layout shift per game.
-const SHELF_SIZE = 10
+// Exported so App's settle gate counts on-shelf arrivals against the same
+// bound the shelf renders against.
+export const SHELF_SIZE = 10
 
 interface StageProps {
   frameRef: RefObject<HTMLDivElement>
@@ -119,6 +121,13 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
   // True between user tapping Collect-All and the snap-fill firing — only
   // populated when the user taps before all 10 composites have arrived.
   const [collectAllPending, setCollectAllPending] = useState(false)
+  // True once the user taps Collect-All while the stream is STILL OPEN: we
+  // snap-fill what's arrived and stay in 'browsing', auto-filling each later
+  // arrival (see the auto-fill effect) so nothing the user earned is dropped.
+  // The settle→done effect fires the finale once the stream settles. Reset on
+  // reaching the finale. (Tapping Collect-All after the stream settled goes
+  // straight to 'done' and never sets this.)
+  const [collectAllActive, setCollectAllActive] = useState(false)
   // Slot indices whose silhouettes have glowed in as "ready to tap".
   const [readySlots, setReadySlots] = useState<Set<number>>(() => new Set())
   // Toggled true after the last card stores; drives the finale-label visibility
@@ -146,6 +155,10 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
   useEffect(() => { arrivedRef.current = readySlots.size }, [readySlots])
   const streamSettledRef = useRef(streamSettled)
   useEffect(() => { streamSettledRef.current = streamSettled }, [streamSettled])
+  // Mirror onComplete so the completion fail-safe timer below always calls the
+  // latest closure (NFTRevealScreen passes a fresh arrow each render).
+  const onCompleteRef = useRef(onComplete)
+  useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
 
   const cardRefs = useRef<Record<number, OrbApi>>({})
   const slotRef = useRef<SlotGridApi>(null)
@@ -167,11 +180,16 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
   // useEffect; the latch keeps us from re-firing the celebration burst
   // on every dismiss.
   const finaleFiredRef = useRef(false)
-  // Tap queue — when the user taps during a phase that can't act yet
-  // (e.g. cardEnter is still running), we record the intent here and
-  // flush it the moment phase becomes one that can handle it.
-  // Eliminates the "I tapped but nothing happened" feel for fast clickers.
-  const pendingActionRef = useRef<'open' | 'store' | null>(null)
+  // Cancels the in-flight single-card store (kills its GSAP timeline + removes
+  // its fly-badge). Lets Collect-All take over mid-store WITHOUT the store's
+  // onComplete later firing and resetting the sequence state out from under
+  // the finale. Null when no store is in flight.
+  const storeCancelRef = useRef<(() => void) | null>(null)
+  // Finale timers — held in refs so they're cleared on unmount. The nested
+  // Continue-button timeout previously leaked if the user left mid-celebration
+  // (only the outer delay timer was cleared, and only on seqPhase change).
+  const finaleTimerRef = useRef<number | null>(null)
+  const continueTimerRef = useRef<number | null>(null)
   // True once the live tap-and-hold charge crosses the commit
   // threshold during the current hold. Drives the label switch
   // from "Tap and hold" to "Reveal!" — signals the user can let go.
@@ -276,12 +294,13 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
   useEffect(() => {
     const arrived = readySlots.size
     if ((seqPhase === 'browsing' || seqPhase === 'revealing') &&
+        !collectAllActive &&
         arrived >= 2 && revealedCount < arrived) {
       setCollectAllVisible(true)
     } else if (!collectAllPending) {
       setCollectAllVisible(false)
     }
-  }, [seqPhase, revealedCount, readySlots.size, collectAllPending])
+  }, [seqPhase, revealedCount, readySlots.size, collectAllPending, collectAllActive])
 
   // Escape hatch. Surfaces a manual Continue when the user is parked on the
   // shelf with nothing to act on:
@@ -319,11 +338,71 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     const readyUnstored = Array.from(readySlots).some((i) => !filled[i])
     if (readyUnstored) return
     if (storedCount > 0) {
+      setCollectAllActive(false)
       setActiveSlot(-1)
       setPhase('idle')
       setSeqPhase('done')
     }
   }, [seqPhase, streamSettled, filled, readySlots])
+
+  // ── Reveal completion fail-safe ──────────────────────────────────────────
+  // Every reveal here is a MANUAL silhouette tap (onSilhouetteClick); nothing
+  // advances on its own while the user rests in 'browsing'. So a user who stops
+  // tapping with cards still on the shelf hangs indefinitely — the settle→finale
+  // effect above bails while a card is ready-but-unstored, and the stuck-overlay
+  // escape is suppressed for the same reason. That is the field "stuck" report:
+  // the reveal sits there and flow.nft_reveal_complete never fires (debug logs,
+  // game 92: nft_reveal_started count=2, no reveal_complete, user force-closed
+  // after ~45s).
+  //
+  // Once the stream has SETTLED, bound the wait: if the user stays idle in
+  // 'browsing' with ready-but-unstored cards for FAILSAFE_IDLE_MS, finish for
+  // them — snap-fill whatever resolved, then fire onComplete. A manual tap moves
+  // us out of 'browsing' (→ 'revealing') and tears this timer down, so an engaged
+  // user is never interrupted; it re-arms only when they return to an idle shelf.
+  // Attestations live in the channel buffer regardless of local store state, so
+  // the downstream collected-count is unaffected.
+  const FAILSAFE_IDLE_MS = 8_000
+  useEffect(() => {
+    if (seqPhase !== 'browsing') return
+    if (!streamSettled) return
+    const readyUnstored = Array.from(readySlots).some((i) => !filled[i])
+    if (!readyUnstored) return  // settle→finale / stuck-overlay cover the rest
+    const t = window.setTimeout(() => {
+      setFilled((prev) => {
+        const next = prev.slice()
+        const cs = cardsRef.current
+        for (let i = 0; i < cs.length; i++) {
+          const src = cs[i]?.badgeSrc
+          if (src && !next[i]) next[i] = src
+        }
+        return next
+      })
+      onCompleteRef.current?.()
+    }, FAILSAFE_IDLE_MS)
+    return () => window.clearTimeout(t)
+  }, [seqPhase, streamSettled, readySlots, filled])
+
+  // Auto-collect: while Collect-All is active and the stream is still open,
+  // snap-fill each newly-arrived attestation as it resolves. This is what
+  // keeps "collect all" honest for a still-streaming pack — every earned
+  // collectible lands on the shelf, and the settle→done effect above fires
+  // the finale only once the stream settles with everything filled. (Tapping
+  // Collect-All at card 4 of 10 used to jump to 'done' and silently drop
+  // cards 5..10 that were still streaming in.)
+  useEffect(() => {
+    if (!collectAllActive) return
+    setFilled((prev) => {
+      let changed = false
+      const next = prev.slice()
+      const cs = cardsRef.current
+      for (let i = 0; i < cs.length; i++) {
+        const src = cs[i]?.badgeSrc
+        if (src && !next[i]) { next[i] = src; changed = true }
+      }
+      return changed ? next : prev
+    })
+  }, [collectAllActive, readySlots, cards])
 
   function handleStuckContinue(): void {
     // User chose to bail. onComplete fires the nft_reveal_complete
@@ -367,17 +446,20 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
   // fast-forward the rest. This gives each reveal its own moment of
   // anticipation and respects the user's pace.
   //
-  // Phase progression is DECOUPLED from the orb's visual animation.
-  // R3F's reconciler mounts the orb mesh asynchronously, with timing
-  // that varies between desktop and mobile browsers. The phase timer
-  // below ALWAYS advances 'enter' → 'ready' after the spawn
-  // duration; the visual spawn fires precisely when OrbScene's
-  // onOrbReady callback runs (no polling, no race). Together this
-  // makes tap-and-hold reliable on desktop AND mobile.
+  // The orb becomes tappable ('ready') once it has VISUALLY ARRIVED — not
+  // after a fixed gate measured from when this effect ran. R3F mounts the
+  // mesh asynchronously (timing varies by device) and the visual spawn only
+  // starts when OrbScene's onOrbReady fires, so we anchor 'ready' to the
+  // spawn START plus the orb's opacity-in (~0.4s in revealSpawn): tappable
+  // exactly as the orb finishes lighting up. A separate cap fires 'ready'
+  // anyway if the mesh never mounts, so the user can't get stuck on a dead
+  // 'enter' phase. (The old flat 600ms-from-effect-start gate left the lit
+  // orb un-tappable for a beat, and could even open before the orb appeared
+  // on a slow mount.)
 
-  // Stash the latest spawn invocation per-slot so OrbScene's
-  // onOrbReady callback (declared in JSX, can't capture changing
-  // closures cleanly) can trigger it without re-binding.
+  // Stash the latest spawn invocation per-slot so OrbScene's onOrbReady
+  // callback (declared in JSX, can't capture changing closures cleanly) can
+  // trigger it without re-binding.
   const pendingSpawnRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -388,41 +470,51 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     if (!api) return
 
     const reduced = prefersReducedMotion()
-    const SPAWN_DURATION_MS = reduced ? 0 : 600
+    // Spawn-start → tappable. Matches revealSpawn's opacity-in (0.4s) so the
+    // gate opens as the orb lights up, not a beat after it's already settled.
+    const READY_AFTER_SPAWN_MS = reduced ? 0 : 420
+    // Fallback so a never-mounting mesh can't strand us on 'enter'.
+    const SPAWN_CAP_MS = reduced ? 0 : 900
 
-    // 1. Phase-progression timer — fires regardless of orb-mesh state.
-    const phaseTimer = window.setTimeout(() => {
-      setPhase('ready')
-    }, SPAWN_DURATION_MS)
-
-    // 2. Visual spawn — runs immediately if the orb mesh is already
-    //    mounted; otherwise armed for OrbScene's onOrbReady callback
-    //    to call it as soon as the mesh commits to the scene.
-    let visualTl: gsap.core.Timeline | null = null
     let cancelled = false
+    let visualTl: gsap.core.Timeline | null = null
+    let readyTimer: number | undefined
+    let advanced = false
+    const advanceToReady = (): void => {
+      if (cancelled || advanced) return
+      advanced = true
+      setPhase('ready')
+    }
 
+    // Cap (fallback) — fires regardless of orb-mesh state.
+    const capTimer = window.setTimeout(advanceToReady, SPAWN_CAP_MS)
+
+    // Visual spawn — runs immediately if the orb mesh is already mounted;
+    // otherwise armed for onOrbReady to call as soon as the mesh commits.
     const runVisualSpawn = (): void => {
-      if (cancelled) return
-      if (visualTl) return  // already ran (e.g., called twice)
+      if (cancelled || visualTl) return  // already ran (e.g., called twice)
       const frameEl = frameRef.current
       if (!frameEl) return
       const stageRect = frameEl.getBoundingClientRect()
       visualTl = revealSpawn(api, particleRef.current, stageRect, { reduced })
+      // Open the tap gate once the orb has visually arrived. Anchored to the
+      // spawn START (here), so it can never open before the orb is on screen.
+      readyTimer = window.setTimeout(advanceToReady, READY_AFTER_SPAWN_MS)
     }
 
     if (api.orb()) {
-      // Mesh already mounted (e.g., OrbScene was reused or a
-      // re-render after a prior reveal). Spawn immediately.
+      // Mesh already mounted (OrbScene reused / re-render after a prior
+      // reveal). Spawn immediately.
       runVisualSpawn()
     } else {
-      // Arm — onOrbReady (passed down to OrbScene) will fire this
-      // the instant R3F commits the mesh.
+      // Arm — onOrbReady fires this the instant R3F commits the mesh.
       pendingSpawnRef.current = runVisualSpawn
     }
 
     return () => {
       cancelled = true
-      window.clearTimeout(phaseTimer)
+      window.clearTimeout(capTimer)
+      if (readyTimer !== undefined) window.clearTimeout(readyTimer)
       pendingSpawnRef.current = null
       visualTl?.kill()
     }
@@ -464,7 +556,7 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     }
     if (finaleFiredRef.current) return
     finaleFiredRef.current = true
-    const timer = setTimeout(() => {
+    finaleTimerRef.current = window.setTimeout(() => {
       const frameEl = frameRef.current
       const particles = particleRef.current
       if (frameEl && particles) {
@@ -476,16 +568,25 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
       haptic.play('finale')
       setFinaleVisible(true)
       // Continue button appears 1.5s after the finale so the celebration
-      // beat lands before the CTA arrives.
-      setTimeout(() => setContinueVisible(true), 1500)
+      // beat lands before the CTA arrives. Held in a ref (not cleared here)
+      // so it survives a done→viewing→done round-trip; the unmount effect
+      // below clears it.
+      continueTimerRef.current = window.setTimeout(() => setContinueVisible(true), 1500)
     }, FINALE_DELAY_MS)
-    return () => clearTimeout(timer)
+    return () => { if (finaleTimerRef.current) window.clearTimeout(finaleTimerRef.current) }
   }, [seqPhase, frameRef])
 
+  // Clear finale timers on unmount (the nested Continue timeout otherwise
+  // leaked when the user left mid-celebration).
+  useEffect(() => () => {
+    if (finaleTimerRef.current) window.clearTimeout(finaleTimerRef.current)
+    if (continueTimerRef.current) window.clearTimeout(continueTimerRef.current)
+  }, [])
+
   const onSilhouetteClick = useCallback((slotIdx: number) => {
-    // While Collect-All is queued waiting for full load, don't let the
-    // user start a manual reveal in parallel — would race the snap-fill.
-    if (collectAllPending) return
+    // While Collect-All is queued/active, don't let the user start a manual
+    // reveal in parallel — it'd race the snap-fill / auto-collect.
+    if (collectAllPending || collectAllActive) return
     if (seqPhase !== 'browsing') return
     if (filled[slotIdx]) return
     if (!readySlots.has(slotIdx)) return
@@ -513,7 +614,47 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     setActiveSlot(slotIdx)
     setSeqPhase('revealing')
     setPhase('enter')
-  }, [collectAllPending, seqPhase, filled, readySlots, frameRef])
+  }, [collectAllPending, collectAllActive, seqPhase, filled, readySlots, frameRef])
+
+  // Commit a stored card and pick the next sequence state. Shared by the
+  // store animation's onComplete AND the geometry-missing fallback in onStore
+  // (so a missing slot/orb can't strand us in 'storing'). Reads the freshest
+  // cards / filled / readySlots / settle via refs, so it needs no deps.
+  const finishStore = useCallback((slotIdx: number, badgeSrc: string) => {
+    const nextFilled = filledRef.current.slice()
+    nextFilled[slotIdx] = badgeSrc
+    const filledCount = nextFilled.filter(Boolean).length
+
+    // If any OTHER silhouette is already ready (and not yet revealed), chain
+    // straight into it rather than kicking the user back to browse. Lowest
+    // slot-index first (deterministic, matches reading order).
+    const ready = readySlotsRef.current
+    const candidates: number[] = []
+    for (let i = 0; i < cardsRef.current.length; i++) {
+      if (i === slotIdx) continue
+      if (nextFilled[i]) continue
+      if (!ready.has(i)) continue
+      candidates.push(i)
+    }
+    candidates.sort((a, b) => a - b)
+
+    setFilled(nextFilled)
+    if (candidates.length > 0) {
+      setActiveSlot(candidates[0]!)
+      setPhase('enter')
+    } else if (streamSettledRef.current && filledCount >= arrivedRef.current) {
+      // Stored every card that ARRIVED and the stream is settled → finale.
+      setActiveSlot(-1)
+      setPhase('idle')
+      setSeqPhase('done')
+    } else {
+      // More may still arrive (or we're awaiting the outcome) — return to
+      // browsing; the settle→done effect closes it out later.
+      setActiveSlot(-1)
+      setPhase('idle')
+      setSeqPhase('browsing')
+    }
+  }, [])
 
   const onStore = useCallback(() => {
     if (phase !== 'revealed') return
@@ -522,36 +663,50 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     if (!api) return
     const frameEl = frameRef.current
     if (!frameEl || !flyLayerRef.current || !slotRef.current || !particleRef.current) return
+
+    const slotIdx = activeSlot
+    const badgeSrc = current.badgeSrc
+
     sfx.play('tap-store')
     haptic.play('tap-store')
     // Stop any rare-aura loop that may be running (Phase 4 adds it for
     // rare reveals; harmless no-op until then).
     if (current.isRare) sfx.stopLoop('legendary-aura-loop')
+
+    // Resolve ALL geometry BEFORE mutating phase or touching the DOM. The
+    // source rect is the orb's IPFS image, falling back to a centered
+    // approximation off the orb root if the image hasn't rendered yet. If the
+    // slot center OR the source rect is unavailable, commit the store WITHOUT
+    // the arc animation — never set 'storing' or append a fly-badge that we'd
+    // then strand (the old order appended the badge + set 'storing' before the
+    // `if (!slotCenter) return`, soft-locking the user in 'storing' forever
+    // and leaking the badge; api.root()! could also throw into the boundary).
+    const slotCenter = slotRef.current.getSlotCenter(slotIdx)
+    const imgEl = api.image()
+    const rootEl = api.root()
+    const fromRect: BadgeRect | null = imgEl
+      ? imgEl.getBoundingClientRect()
+      : rootEl ? approxOrbImageRect(rootEl.getBoundingClientRect()) : null
+    if (!slotCenter || !fromRect) {
+      finishStore(slotIdx, badgeSrc)
+      return
+    }
+
     setPhase('storing')
     const stageRect = frameEl.getBoundingClientRect()
 
     const flyBadge = document.createElement('img')
-    flyBadge.src = current.badgeSrc
+    flyBadge.src = badgeSrc
     flyBadge.className = 'fly-badge'
     flyBadge.alt = ''
     flyBadge.draggable = false
     flyLayerRef.current.appendChild(flyBadge)
 
-    // Source rect for the badge arc-fly: the orb's IPFS image element.
-    // Falls back to a centered approximation if the image hasn't rendered
-    // yet (e.g., immediately after a reduced-motion path).
-    const imgEl = api.image()
-    const fromRect: BadgeRect = imgEl
-      ? imgEl.getBoundingClientRect()
-      : approxOrbImageRect(api.root()!.getBoundingClientRect())
-    const slotCenter = slotRef.current.getSlotCenter(activeSlot)
-    if (!slotCenter) return
-
     if (current.isRare) {
       setTimeout(() => particleRef.current?.stopAmbient(), 450)
     }
 
-    const slotEl = slotRef.current.getSlotEl(activeSlot)
+    const slotEl = slotRef.current.getSlotEl(slotIdx)
     const tint: Tint = current.isRare ? [255, 140, 60] : [120, 90, 180]
 
     const tl = cardStore({
@@ -564,65 +719,43 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
       stageRect,
       tint
     })
-    tl.eventCallback('onComplete', () => {
-      const slotIdx = activeSlot
+    // Let storeAll cancel this store mid-flight: kill the timeline (so its
+    // onComplete never fires after we've moved to the finale) and remove the
+    // fly-badge so it can't leak.
+    storeCancelRef.current = () => {
+      tl.kill()
       if (flyBadge.parentNode) flyBadge.parentNode.removeChild(flyBadge)
-
-      // Compute the next filled array so we can decide the next state
-      // deterministically before committing any of it.
-      const nextFilled = filledRef.current.slice()
-      nextFilled[slotIdx] = current.badgeSrc
-      const filledCount = nextFilled.filter(Boolean).length
-
-      // If any OTHER silhouette is already ready (and not yet revealed),
-      // chain straight into that one instead of kicking the user back to
-      // the browse screen. Lowest slot-index first (deterministic and
-      // matches the natural reading order).
-      const ready = readySlotsRef.current
-      const candidates: number[] = []
-      for (let i = 0; i < cards.length; i++) {
-        if (i === slotIdx) continue
-        if (nextFilled[i]) continue
-        if (!ready.has(i)) continue
-        candidates.push(i)
-      }
-      candidates.sort((a, b) => a - b)
-
-      setFilled(nextFilled)
-      if (candidates.length > 0) {
-        setActiveSlot(candidates[0]!)
-        setPhase('enter')
-      } else if (streamSettledRef.current && filledCount >= arrivedRef.current) {
-        // Stored every card that ARRIVED and the stream is settled (outcome
-        // resolved / went quiet / capped) → finale. Without the settle gate
-        // we'd cut a still-streaming pack short the moment the user caught up.
-        setActiveSlot(-1)
-        setPhase('idle')
-        setSeqPhase('done')
-      } else {
-        // More may still arrive (or we're still waiting on the outcome) —
-        // return to browsing; the settle→done effect closes it out later.
-        setActiveSlot(-1)
-        setPhase('idle')
-        setSeqPhase('browsing')
-      }
+    }
+    tl.eventCallback('onComplete', () => {
+      storeCancelRef.current = null
+      if (flyBadge.parentNode) flyBadge.parentNode.removeChild(flyBadge)
+      finishStore(slotIdx, badgeSrc)
     })
-  }, [phase, current, activeSlot, cards, frameRef])
+  }, [phase, current, activeSlot, frameRef, finishStore])
 
   // ── Store-all (Collect-All) ───────────────────────────────────────────
-  // Snap-fill every empty slot with its badge in one setState, then jump
-  // straight to 'done'. The existing slotPop CSS keyframe runs on each
-  // <img> as it mounts, giving a satisfying unison pop without any per-
-  // card animation pipeline. If the user tapped before all composites
-  // had arrived, awaitFullLoad blocks until they do (button shows
-  // "Collecting…" via the pending prop while we wait).
+  // Snap-fill every resolved slot with its badge in one setState. The
+  // existing slotPop CSS keyframe runs on each <img> as it mounts, giving a
+  // satisfying unison pop without any per-card animation pipeline.
   //
-  // Allowed from BOTH 'browsing' and 'revealing'. If the user is mid-
-  // flow with a card on screen, we stop any in-flight legendary aura
-  // (Card unmounts when seqPhase flips to 'done') and snap-fill includes
-  // the in-flight slot.
+  // Where we go next depends on whether the stream has settled:
+  //   - settled  → straight to 'done' (the finale); nothing more will arrive.
+  //   - still open → stay in 'browsing' and latch collectAllActive so each
+  //     later arrival auto-fills too (see the auto-fill effect); the settle→
+  //     done effect fires the finale once the stream settles. This is the fix
+  //     for "Collect-All at card 4 of 10 silently drops cards 5..10".
+  //
+  // Allowed from BOTH 'browsing' and 'revealing'. If the user is mid-flow with
+  // a card on screen we stop any in-flight legendary aura and cancel the
+  // in-flight store (the card's slot is included in the snap-fill).
   const storeAll = useCallback(async () => {
     if (seqPhase !== 'browsing' && seqPhase !== 'revealing') return
+    // Cancel any in-flight single-card store FIRST (synchronously, before the
+    // await) so its onComplete can't fire after we've moved to the finale (or
+    // back to browsing for auto-collect) and reset the sequence state out from
+    // under us — which, with finaleFiredRef already latched, broke the finale.
+    storeCancelRef.current?.()
+    storeCancelRef.current = null
     if (current?.isRare) {
       sfx.stopLoop('legendary-aura-loop')
     }
@@ -643,7 +776,19 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     haptic.play('snap-fill')
     setActiveSlot(-1)
     setPhase('idle')
-    setSeqPhase('done')
+
+    if (streamSettledRef.current) {
+      // Nothing more will arrive — straight to the finale.
+      setSeqPhase('done')
+    } else {
+      // Stream still open: stay in 'browsing' and latch auto-collect so each
+      // later arrival snap-fills too (see the auto-fill effect). The settle→
+      // done effect fires the finale once the stream settles. Jumping to
+      // 'done' here would freeze the shelf at the current count and silently
+      // drop every collectible still streaming in.
+      setCollectAllActive(true)
+      setSeqPhase('browsing')
+    }
   }, [seqPhase, awaitFullLoad, current])
 
   // ── Tap-to-view on finale ─────────────────────────────────────────────
@@ -656,17 +801,23 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
       setActiveSlot(-1)
       return
     }
-    api.root()?.classList.remove('is-viewing')
-    gsap.to(api.root(), {
+    const root = api.root()
+    const settle = () => {
+      setSeqPhase('done')
+      setPhase('idle')
+      setActiveSlot(-1)
+    }
+    // root may be null (OrbScene unmounted). gsap throws on a null target
+    // ("...evaluating 't._gsap'"), so skip the fade-out tween and settle
+    // immediately rather than throw out of the tap handler.
+    if (!root) { settle(); return }
+    root.classList.remove('is-viewing')
+    gsap.to(root, {
       opacity: 0,
       scale: 0.94,
       duration: 0.25,
       ease: 'power2.in',
-      onComplete: () => {
-        setSeqPhase('done')
-        setPhase('idle')
-        setActiveSlot(-1)
-      }
+      onComplete: settle
     })
     sfx.play('card-dissolve')
   }, [seqPhase, current])
@@ -701,26 +852,19 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
       phase === 'revealed' ? 'store' :
       null
 
-  // Tap queue (clicks only — tap-and-hold charge handled separately
-  // in tapZonePointerDown/Up). Used by the chained-reveal path where
-  // taps during a transient phase ('enter' / 'flipping' / 'storing')
-  // should fire once the phase can handle them.
+  // Plain tap on the revealed card → store it. (Tap-and-hold charge + swipe
+  // are handled separately in the pointer handlers.) Taps during the
+  // transient enter/flipping/storing phases do nothing.
   //
-  // 'ready' is NO LONGER reachable via plain tap — the first reveal
-  // requires a deliberate hold. The 'store' tap pattern is unchanged.
+  // There used to be a 'store' tap-queue here: a tap during 'enter'/'flipping'
+  // queued a store that fired the instant the card revealed. That only made
+  // sense with auto-burst chaining (enter → revealed automatically). Chaining
+  // was removed — every reveal now requires a deliberate tap-and-hold — so the
+  // queued store would fling a just-revealed card to the shelf before the user
+  // ever saw its face. Removed (along with the flush effect + pendingActionRef).
   const onQueuedTap = useCallback(() => {
     if (seqPhase !== 'revealing') return
-    if (phase === 'revealed') {
-      onStore()
-    } else if (phase === 'enter' || phase === 'flipping') {
-      // Queue a store intent — fires the moment phase becomes
-      // 'revealed' (chained reveals auto-burst at spawn-end, so the
-      // user's tap during enter becomes a store the moment they see
-      // the image).
-      pendingActionRef.current = 'store'
-    }
-    // 'ready', 'storing', 'idle' don't queue here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (phase === 'revealed') onStore()
   }, [seqPhase, phase, onStore])
 
   // ── Charge (tap-and-hold) + Swipe-to-store handlers ──────────────────
@@ -900,20 +1044,6 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     onQueuedTap()
   }, [onQueuedTap, phase])
 
-  // Flush queued intent on phase transition. Only 'store' queues here
-  // (the 'open' path now requires a deliberate hold, not a queued tap).
-  useEffect(() => {
-    const pending = pendingActionRef.current
-    if (!pending) return
-    if (pending === 'store' && phase === 'revealed') {
-      pendingActionRef.current = null
-      onStore()
-    } else if (phase === 'idle' || seqPhase !== 'revealing') {
-      // Sequence ended or returned to browse — drop the queued intent.
-      pendingActionRef.current = null
-    }
-  }, [phase, seqPhase, onStore])
-
   const renderCard = (seqPhase !== 'done' && current && phase !== 'idle')
                   || (seqPhase === 'viewing' && current)
   // Item-name caption: shown once the card face is revealed, and while
@@ -925,6 +1055,15 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     phase === 'revealed' ||
     phase === 'storing'
 
+  // First-arrival guidance: when the user lands on the shelf with tappable
+  // silhouettes but hasn't revealed anything yet, tell them what to do. Hides
+  // the moment they reveal their first card (or auto-collect takes over).
+  const showShelfHint =
+    seqPhase === 'browsing' &&
+    !collectAllActive &&
+    revealedCount === 0 &&
+    readySlots.size > 0
+
   return (
     <>
       <div className="bg-breath" aria-hidden="true" />
@@ -932,7 +1071,7 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
       <SlotGrid
         ref={slotRef}
         filled={filled}
-        silhouettes={seqPhase === 'browsing' ? silhouettes : Array(cards.length).fill(null)}
+        silhouettes={seqPhase === 'browsing' && !collectAllActive ? silhouettes : Array(cards.length).fill(null)}
         readySlots={readySlots}
         onSilhouetteClick={onSilhouetteClick}
         active={galaxyActive}
@@ -1024,7 +1163,25 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
           />
         )}
 
+        <div
+          className="shelf-hint"
+          data-visible={showShelfHint ? 'true' : 'false'}
+          aria-hidden={!showShelfHint}
+        >
+          Tap a collectible to reveal it
+        </div>
+
         <ActionLabel mode={buttonMode} />
+
+        {/* Soft spotlight scrim that darkens the shelf behind the completion
+            message + Pocket banner so both read clearly. Sits below the
+            particle canvas (z:11) so the celebration sparkle still pops over
+            it, and hides while inspecting a single tapped card. */}
+        <div
+          className="finale-scrim"
+          data-visible={finaleVisible && seqPhase !== 'viewing' ? 'true' : 'false'}
+          aria-hidden="true"
+        />
 
         <div
           className="finale-label"
@@ -1032,7 +1189,22 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
           data-viewing={seqPhase === 'viewing' ? 'true' : 'false'}
           aria-hidden={!finaleVisible}
         >
-          Collection complete!
+          {/* "Collection complete!" only when the full 10-slot shelf was
+              earned; a partial haul gets a non-overclaiming line. */}
+          {revealedCount >= SHELF_SIZE ? 'Collection complete!' : 'All collected!'}
+        </div>
+
+        {/* The one place we tell the user where their collectibles live — so
+            the wordier flow screens don't have to repeat it. Like the
+            finale-label, it stays put and recedes (dims + drops behind the
+            card) when a collectible is tapped — it doesn't animate away. */}
+        <div
+          className="finale-pocket-banner"
+          data-visible={finaleVisible ? 'true' : 'false'}
+          data-viewing={seqPhase === 'viewing' ? 'true' : 'false'}
+          aria-hidden={!finaleVisible}
+        >
+          Find these anytime in your Pocket.
         </div>
 
         {continueVisible && seqPhase !== 'viewing' && onComplete && (
@@ -1062,7 +1234,7 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
             {streamSettled ? "That's the round." : "Still securing your collectibles."}
           </div>
           <div className="stage-stuck-sub">
-            {streamSettled ? "Continue when you're ready." : "Hang tight — or continue and check your Pocket."}
+            {streamSettled ? "Continue when you're ready." : "Hang tight, or continue and check your Pocket."}
           </div>
           <button
             type="button"

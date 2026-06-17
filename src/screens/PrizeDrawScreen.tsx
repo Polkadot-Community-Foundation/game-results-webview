@@ -93,6 +93,20 @@ export default function PrizeDrawScreen({
     return () => { cancelled = true }
   }, [])
 
+  // `won` is native-authoritative; `winningTickets` is display data. If they
+  // contradict, the cinematic would otherwise misrepresent the result — light
+  // the user's own code gold under a "no win" verdict (won:false but the
+  // ticket is in the list), or fabricate a rank (won:true but absent). Surface
+  // the mismatch for telemetry; LaneScene + ResultHero defend the visuals.
+  useEffect(() => {
+    const inWinners = draw.winningTickets.includes(draw.userTicket)
+    if (draw.won && draw.winningTickets.length > 0 && !inWinners) {
+      sendFlowEvent({ type: 'flow.error', phase: 'draw_mismatch', detail: 'won_not_in_winners' })
+    } else if (!draw.won && inWinners) {
+      sendFlowEvent({ type: 'flow.error', phase: 'draw_mismatch', detail: 'loss_in_winners' })
+    }
+  }, [draw])
+
   function handleReveal(): void {
     sendFlowEvent({ type: 'flow.prize_draw_started' })
     if (prefersReducedMotion()) {

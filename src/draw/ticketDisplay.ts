@@ -17,11 +17,15 @@
 // Both consume the same hash so the same ticket renders the same code
 // everywhere.
 
-// Crockford base32 minus visually ambiguous chars (no 0, 1, I, L, O, U).
-// 26 letters - 5 ambiguous (I, L, O, U) + 10 digits - 2 ambiguous (0, 1)
-// → 22 + 8 = 30, then drop V to get a power-of-2-friendly 32-style feel.
-// Actually let's just pick 32 readable chars for a clean 5-bit-per-char encoding.
-const ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ' + '%@'  // 32 chars total
+// Confusable-free alphabet — Crockford base32 with the visually ambiguous
+// letters dropped (no I, L, O, U) and the ambiguous digits dropped (no 0, 1):
+//   digits 2-9            → 8 chars
+//   A-Z minus I, L, O, U  → 22 chars
+//   total                 → 30 chars
+// We don't need a power-of-2 size: encoding is `byte % ALPHABET_LEN`, not a
+// 5-bit slice, so 30 is fine. (The prior alphabet padded to 32 with `%` and
+// `@`, which aren't alphanumeric and undercut the "readable code" intent.)
+const ALPHABET = '23456789ABCDEFGHJKMNPQRSTVWXYZ'  // 30 chars
 const ALPHABET_LEN = ALPHABET.length
 
 function isValidHash(hash: string): boolean {

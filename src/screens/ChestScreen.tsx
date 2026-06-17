@@ -129,10 +129,10 @@ export default function ChestScreen({ onOpen }: ChestScreenProps) {
 
       <header className="chest-header">
         <div className="chest-eyebrow">Game complete</div>
-        <h1 className="chest-title">Your prizes are ready</h1>
+        <h1 className="chest-title">See what prizes you got</h1>
         <p className="chest-sub">
-          Open the chest to reveal your collectibles, and check to see if
-          you've become a member with a prize draw!
+          The better you played, the more you collected. Plus, find out if
+          you've become a member with a prize draw.
         </p>
       </header>
 

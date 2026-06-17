@@ -1,18 +1,25 @@
-// HandoffScreen — shown when the reveal finishes but the game outcome never
-// resolved in the foreground (the attestation stream went quiet without
-// crossing the passing threshold, and no setGameOutcome arrived).
+// HandoffScreen — the long-wait fallback when the game outcome never resolves.
+// Reached only after the awaiting-verdict screen has waited a long time with no
+// setGameOutcome (collectibles arrive fast now, so this is genuinely "we still
+// can't confirm your result", not "collectibles still streaming").
 //
-// We deliberately do NOT declare failure here — a late-but-passing player
-// and a true failer are indistinguishable at this point — so we hand off to
-// the user's Pocket, where the collectibles land once the chain settles.
-// Terminal screen: its button fires flow.complete so native can dismiss.
+// We deliberately do NOT declare failure here — a late-but-passing player and a
+// true failer are indistinguishable at this point — so we hand off to the
+// user's Pocket, where the result + collectibles land once the chain settles.
+// Terminal screen: its button calls onDone (App fires flow.complete and
+// latches the dismissal so a late outcome can't route the user back).
 
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
-import { sendFlowEvent } from '../bridge/send'
 import { prefersReducedMotion } from '../anim/easings'
 
-export default function HandoffScreen() {
+interface HandoffScreenProps {
+  /** Called when the user dismisses the handoff. App fires flow.complete
+   *  and marks the handoff done so a late outcome won't re-enter the flow. */
+  onDone: () => void
+}
+
+export default function HandoffScreen({ onDone }: HandoffScreenProps) {
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,19 +34,15 @@ export default function HandoffScreen() {
     )
   }, [])
 
-  function handleDone() {
-    sendFlowEvent({ type: 'flow.complete' })
-  }
-
   return (
     <div className="handoff-screen" ref={rootRef}>
       <div className="handoff-mark" aria-hidden="true">✦</div>
-      <h1 className="handoff-headline">Still rolling in.</h1>
+      <h1 className="handoff-headline">Still finishing up.</h1>
       <p className="handoff-sub">
-        Your collectibles are still being secured — they'll show up in your
-        Pocket shortly.
+        We're wrapping up your results. Everything will be waiting in your
+        Pocket.
       </p>
-      <button type="button" className="handoff-cta" onClick={handleDone}>
+      <button type="button" className="handoff-cta" onClick={onDone}>
         Got it
       </button>
     </div>

@@ -6,12 +6,15 @@ import PrizeDrawScreen from './screens/PrizeDrawScreen'
 import NFTRevealScreen from './screens/NFTRevealScreen'
 import UsernameCTAScreen from './screens/UsernameCTAScreen'
 import HandoffScreen from './screens/HandoffScreen'
+import AwaitingVerdictScreen from './screens/AwaitingVerdictScreen'
+import NoAttestationsScreen from './screens/NoAttestationsScreen'
 import DoneScreen from './screens/DoneScreen'
 import BootErrorScreen from './screens/BootErrorScreen'
 import ErrorBoundary from './components/ErrorBoundary'
 import { readInitialInput, subscribeInput } from './bridge/input'
 import { subscribeAvailability } from './bridge/availability'
-import { resetAttestations, subscribeAttestations, bufferedAttestationCount } from './bridge/attestations'
+import { resetAttestations, subscribeAttestations, onShelfAttestationCount } from './bridge/attestations'
+import { SHELF_SIZE } from './components/Stage'
 import { subscribeOutcome, readBufferedOutcome, resetOutcome } from './bridge/outcome'
 import { sendFlowEvent } from './bridge/send'
 import { fetchDisplayName } from './bridge/fetchName'
@@ -49,9 +52,35 @@ const BOOT_TIMEOUT_MS = 30_000
 const STALL_QUIET_MS = 9_000
 const REVEAL_CAP_MS = 45_000
 
+// "Tallying your results…" hold. After a no-outcome reveal we wait BRIEFLY for
+// a late-landing verdict, then fall back to the Pocket handoff. Tuned from the
+// debug-log timeline rather than a flat guess:
+//   • A genuine PASS resolves almost instantly once the streamed count crosses
+//     the threshold — native fires setGameOutcome within ~70ms of the 6th
+//     collectible (logs: 6th matched 15:32:35.240 → outcome eval 15:32:35.312).
+//   • Collectibles stream in close together; the largest gap between two
+//     consecutive arrivals in the field logs was ~5s. And the reveal only
+//     reaches this screen AFTER the stream already went quiet (STALL_QUIET_MS)
+//     or hit the cap — so by here the stream is usually already finished.
+//
+// So instead of one long timer (the old 20s, which just trapped sub-threshold
+// players staring at the spinner — the field "stuck" report), hold a short
+// ACTIVITY-AWARE window: a fresh collectible push means the stream is still
+// alive and a threshold-cross may be imminent, so re-arm the quiet timer; once
+// the stream is silent (the common case) hand off promptly. A hard cap keeps
+// even an active-but-never-passing stream from ever feeling stuck. The handoff
+// is the designed no-outcome terminal and still routes back to the verdict if a
+// late pass lands before dismissal (see the handoff effect below) — so a quick
+// fall-back can never *lose* an outcome. The verdict, whenever it arrives,
+// routes straight to results via `outcome`. A manual "Check your Pocket" escape
+// appears sooner still (see AwaitingVerdictScreen).
+const AWAIT_VERDICT_QUIET_MS = 6_000   // hand off this long after the last collectible arrives
+const AWAIT_VERDICT_MAX_MS = 12_000    // absolute cap, even while collectibles keep trickling
+
 type Screen =
   | 'boot' | 'boot_error' | 'chest' | 'nft_reveal' | 'results'
-  | 'prize_draw' | 'username_cta' | 'handoff' | 'done'
+  | 'prize_draw' | 'username_cta' | 'awaiting_verdict'
+  | 'no_attestations' | 'handoff' | 'done'
 
 // The collectibles reveal is the FIRST beat (after the chest) so it can
 // absorb the time while attestations stream in. The outcome — pass/fail and
@@ -76,19 +105,23 @@ function synthOutcome(input: GameResultsInput): GameOutcome | null {
   }
 }
 
-// After the reveal: go to the verdict if the outcome resolved, else hand off
-// ("collectibles still arriving — see your Pocket").
+// After the reveal: the verdict if the outcome resolved, else WAIT for it on
+// the awaiting-verdict screen (which falls back to the Pocket handoff after a
+// short, activity-aware wait).
 function nextAfterReveal(outcome: GameOutcome | null): Screen {
-  return outcome ? 'results' : 'handoff'
+  return outcome ? 'results' : 'awaiting_verdict'
 }
 function nextAfterVerdict(outcome: GameOutcome | null): Screen {
-  // Prize draw is members-only + pass-gated; then the username CTA (new
-  // members), else Done.
+  // New members claim their username RIGHT AFTER the membership-unlocked
+  // verdict; the prize draw (if any) comes after that. Everyone else with a
+  // pass + prize draw goes straight to the draw; otherwise Done.
+  if (outcome?.usernameClaim.eligible) return 'username_cta'
   if (outcome?.passed && outcome.prizeDraw) return 'prize_draw'
-  return outcome?.usernameClaim.eligible ? 'username_cta' : 'done'
+  return 'done'
 }
-function nextAfterPrizeDraw(outcome: GameOutcome | null): Screen {
-  return outcome?.usernameClaim.eligible ? 'username_cta' : 'done'
+function nextAfterUsername(outcome: GameOutcome | null): Screen {
+  // The prize draw follows the username claim for new members.
+  return outcome?.passed && outcome.prizeDraw ? 'prize_draw' : 'done'
 }
 
 // Dev panel is visible ONLY when the URL has `?dev=1` — regardless of
@@ -145,6 +178,10 @@ export default function App() {
   const hasFiredResultsShown = useRef(false)
   const hasFiredAvailabilityNeeded = useRef(false)
   const hasFiredAssetErrors = useRef(false)
+  const hasRequestedDisplayName = useRef(false)
+  // Latches once the user dismisses the terminal handoff (fires flow.complete)
+  // so a late outcome can't route them back into the flow after they've left.
+  const handoffDone = useRef(false)
 
   // Username availability — pushed independently via
   // window.setUsernameAvailability(...), or bundled in the outcome's
@@ -210,24 +247,46 @@ export default function App() {
     return off
   }, [])
 
-  // Resolve `streamSettled` while the reveal is up. A definitive FAIL
-  // outcome settles immediately (nothing more streams); otherwise we settle
-  // on a quiet gap (no new attestation for STALL_QUIET_MS), all 10 arriving,
-  // or an absolute cap. A PASS deliberately does NOT settle here — the pack
-  // keeps streaming up to 10 after the outcome fires at the 6th.
+  // How many ON-SHELF attestations to expect before the reveal can settle
+  // fast (without waiting out the quiet/cap timers). `attestations.total` is
+  // the count the user earned and native streams; clamp to the shelf (native
+  // may report more than render) and fall back to the full shelf when it's
+  // missing. Drives the settle gate below so an under-10 game fast-settles
+  // and a >10 game doesn't wait for arrivals the shelf will never show.
+  const expectedAttestations = useMemo(() => {
+    const t = input?.attestations.total
+    if (typeof t !== 'number' || !Number.isFinite(t) || t <= 0) return SHELF_SIZE
+    return Math.min(SHELF_SIZE, Math.floor(t))
+  }, [input?.attestations.total])
+
+  // A definitive FAIL outcome settles the reveal immediately — nothing more
+  // streams. (A PASS does NOT settle: native keeps streaming the pack up to
+  // SHELF_SIZE after firing the outcome at the 6th, so we wait for the rest.)
   useEffect(() => {
-    if (outcome && !outcome.passed) { setStreamSettled(true); return }
+    if (outcome && !outcome.passed) setStreamSettled(true)
+  }, [outcome])
+
+  // Settle the reveal once every expected on-shelf attestation has arrived,
+  // the stream goes quiet for STALL_QUIET_MS, or the absolute REVEAL_CAP_MS
+  // cap elapses. Deps are [screen, expectedAttestations] ONLY — deliberately
+  // NOT `outcome`: a PASS arriving mid-reveal must not tear this effect down
+  // and re-arm both timers (that restarted the "absolute" cap and the quiet
+  // window even though no new attestation had arrived). The quiet timer
+  // resets only on a real push. Counting is on-shelf (indices < SHELF_SIZE),
+  // so off-shelf pushes can't settle the reveal over an empty shelf.
+  useEffect(() => {
     if (screen !== 'nft_reveal') return
-    if (bufferedAttestationCount() >= 10) { setStreamSettled(true); return }
+    const settledEnough = () => onShelfAttestationCount(SHELF_SIZE) >= expectedAttestations
+    if (settledEnough()) { setStreamSettled(true); return }
     const cap = window.setTimeout(() => setStreamSettled(true), REVEAL_CAP_MS)
     let quiet = window.setTimeout(() => setStreamSettled(true), STALL_QUIET_MS)
     const off = subscribeAttestations(() => {
-      if (bufferedAttestationCount() >= 10) { setStreamSettled(true); return }
+      if (settledEnough()) { setStreamSettled(true); return }
       window.clearTimeout(quiet)
       quiet = window.setTimeout(() => setStreamSettled(true), STALL_QUIET_MS)
     })
     return () => { window.clearTimeout(cap); window.clearTimeout(quiet); off() }
-  }, [screen, outcome])
+  }, [screen, expectedAttestations])
 
   // Boot timeout — if input never arrives, transition to the error screen.
   useEffect(() => {
@@ -257,20 +316,23 @@ export default function App() {
     })
   }, [outcome, availability])
 
-  // If the initial input is missing the user's display name, ask native
-  // for it. Once it arrives we splice it into the member state.
+  // If the initial input is missing the user's display name, ask native for
+  // it ONCE (fetchDisplayName emits flow.request_display_name). Guarded by a
+  // ref so repeated setInput pushes that still lack a name don't re-fire the
+  // request on every input identity change. Once a name arrives we splice it
+  // in, but only if one hasn't already landed by another path.
   useEffect(() => {
     if (!input) return
     if (input.member.displayName) return
-    let cancelled = false
+    if (hasRequestedDisplayName.current) return
+    hasRequestedDisplayName.current = true
     fetchDisplayName().then((name) => {
-      if (cancelled || !name) return
-      setInput((prev) => prev
+      if (!name) return
+      setInput((prev) => prev && !prev.member.displayName
         ? { ...prev, member: { ...prev.member, displayName: name } }
         : prev)
     })
-    return () => { cancelled = true }
-  }, [input?.member.displayName, input])
+  }, [input])
 
   // Tag <body> when running inside a native WebView so CSS can flatten
   // the desktop-shaped phone-frame mockup into the viewport.
@@ -304,22 +366,79 @@ export default function App() {
     sendFlowEvent({ type: 'flow.results_shown' })
   }, [screen])
 
+  // Zero attestations (a true skunk): the reveal settled with nothing on the
+  // shelf. Attestations are the proof you're a real, unique human, so none =
+  // a definitive fail (you can't pass with zero). Skip the verdict/handoff and
+  // go straight to the dedicated "not human enough" exit.
+  useEffect(() => {
+    if (screen !== 'nft_reveal') return
+    if (!streamSettled) return
+    if (onShelfAttestationCount(SHELF_SIZE) !== 0) return
+    setScreen('no_attestations')
+  }, [screen, streamSettled])
+
+  // Awaiting-verdict: after the reveal with no resolved outcome, hold on the
+  // "tallying results" screen. Route to the verdict the instant it lands; else
+  // fall back to the Pocket handoff on a short, activity-aware timer (see the
+  // AWAIT_VERDICT_* notes above). Each fresh collectible push re-arms the quiet
+  // window so a late threshold-cross still surfaces the verdict; a hard cap
+  // bounds the total wait. (The screen also offers a manual "Check your Pocket"
+  // escape → handoff, see its onSkip.)
+  useEffect(() => {
+    if (screen !== 'awaiting_verdict') return
+    if (outcome) { setScreen('results'); return }
+    const toHandoff = () => setScreen('handoff')
+    const hardCap = window.setTimeout(toHandoff, AWAIT_VERDICT_MAX_MS)
+    let quiet = window.setTimeout(toHandoff, AWAIT_VERDICT_QUIET_MS)
+    // A new push = stream still alive, verdict possibly imminent → re-arm the
+    // quiet window (still bounded by hardCap). subscribeAttestations replays
+    // buffered pushes synchronously here, which simply (re)arms it once.
+    const off = subscribeAttestations(() => {
+      window.clearTimeout(quiet)
+      quiet = window.setTimeout(toHandoff, AWAIT_VERDICT_QUIET_MS)
+    })
+    return () => { window.clearTimeout(hardCap); window.clearTimeout(quiet); off() }
+  }, [screen, outcome])
+
+  // Route out of the terminal handoff if the outcome resolves before the user
+  // dismisses it. The handoff is the long-wait fallback when the reveal
+  // finished with no outcome; a setGameOutcome landing a beat later (a
+  // 46s-vs-45s race against the 45s reveal cap) would otherwise be silently
+  // discarded — the user would exit never seeing the verdict / prize-draw /
+  // username ceremony. Once they tap "Got it" (handoffDone latched, flow.
+  // complete fired) we don't yank them back.
+  useEffect(() => {
+    if (screen !== 'handoff') return
+    if (!outcome) return
+    if (handoffDone.current) return
+    setScreen('results')
+  }, [screen, outcome])
+
   // Drive transitions.
   function advance(): void {
     if (!input) return
     if (screen === 'chest') {
       setScreen('nft_reveal')
     } else if (screen === 'nft_reveal') {
-      // Verdict if the outcome resolved; otherwise the Pocket handoff.
-      setScreen(nextAfterReveal(outcome))
+      // Zero attestations → the "not human enough" exit (definitive skunk);
+      // otherwise the verdict if resolved, else the awaiting-verdict wait.
+      if (onShelfAttestationCount(SHELF_SIZE) === 0) {
+        setScreen('no_attestations')
+      } else {
+        setScreen(nextAfterReveal(outcome))
+      }
     } else if (screen === 'results') {
       setScreen(nextAfterVerdict(outcome))
-    } else if (screen === 'prize_draw') {
-      setScreen(nextAfterPrizeDraw(outcome))
     } else if (screen === 'username_cta') {
+      setScreen(nextAfterUsername(outcome))
+    } else if (screen === 'prize_draw') {
+      // Username already happened before the draw (new members), so the draw
+      // is terminal here.
       setScreen('done')
     }
-    // 'handoff' is terminal (HandoffScreen fires flow.complete itself).
+    // 'handoff' is terminal — its CTA goes through handleHandoffDone (fires
+    // flow.complete). A late outcome can still route it out; see the effect
+    // above.
   }
 
   // Asset-error rollup: fired once if we entered 'done' with composite
@@ -352,6 +471,13 @@ export default function App() {
   }
 
   function handleBootClose(): void {
+    sendFlowEvent({ type: 'flow.complete' })
+  }
+
+  // Terminal handoff dismissal. Latches handoffDone BEFORE firing
+  // flow.complete so the route-out effect above can't re-enter the flow.
+  function handleHandoffDone(): void {
+    handoffDone.current = true
     sendFlowEvent({ type: 'flow.complete' })
   }
 
@@ -485,6 +611,7 @@ export default function App() {
           <ResultsScreen
             outcome={outcome}
             {...(userName ? { displayName: userName } : {})}
+            collectedCount={onShelfAttestationCount(SHELF_SIZE)}
             onContinue={advance}
           />
         )}
@@ -509,11 +636,17 @@ export default function App() {
             onContinue={advance}
           />
         )}
+        {screen === 'awaiting_verdict' && (
+          <AwaitingVerdictScreen onSkip={() => setScreen('handoff')} />
+        )}
+        {screen === 'no_attestations' && (
+          <NoAttestationsScreen onDone={() => sendFlowEvent({ type: 'flow.complete' })} />
+        )}
         {screen === 'handoff' && (
-          <HandoffScreen />
+          <HandoffScreen onDone={handleHandoffDone} />
         )}
         {screen === 'done' && (
-          <DoneScreen />
+          <DoneScreen won={!!outcome?.prizeDraw?.won} />
         )}
         </ErrorBoundary>
       </PhoneFrame>
