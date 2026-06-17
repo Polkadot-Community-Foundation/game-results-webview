@@ -61,12 +61,18 @@ export function subscribeAttestations(cb: Listener): () => void {
   return () => { listeners.delete(cb) }
 }
 
-/** Clear all buffered attestations + subscribers. Used by dev panel
- *  when loading a fresh mock so old streams don't bleed into the new
- *  scenario. Not called in production. */
+/** Clear buffered attestations for a fresh mock run (dev panel only; not
+ *  called in production) so an old stream can't bleed into the new scenario.
+ *
+ *  Listeners are intentionally KEPT — same contract as resetOutcome. App's
+ *  collectible-accumulation effect subscribes ONCE for the page lifetime; if we
+ *  cleared listeners here that subscription would die on the first session and
+ *  never receive the new stream, leaving the "Added to your Pocket" album pages
+ *  empty. (Per-screen subscribers like the reveal re-subscribe on their own
+ *  mount, so dropping them here was never necessary.) Subscribers that need a
+ *  clean slate reset their own accumulated state on session start. */
 export function resetAttestations(): void {
   buffered.clear()
-  listeners.clear()
 }
 
 /** Total attestations received so far, across ALL indices (0..63). Note

@@ -264,7 +264,7 @@ function AvailableVariant({ stem, previousUsername, onNext }: AvailableProps) {
       </div>
       <button
         type="button"
-        className="username-cta"
+        className="username-cta cta-primary"
         ref={ctaRef}
         onClick={onNext}
         disabled={!ctaReady}
@@ -374,7 +374,7 @@ function TakenVariant({ name, previousUsername, alternatives, onNext }: TakenPro
       </div>
       <button
         type="button"
-        className="username-cta"
+        className="username-cta cta-primary"
         ref={ctaRef}
         onClick={onNext}
         disabled={!ctaReady}
@@ -439,7 +439,7 @@ function CautiousVariant({ onNext }: CautiousProps) {
       </div>
       <button
         type="button"
-        className="username-cta"
+        className="username-cta cta-primary"
         ref={ctaRef}
         onClick={onNext}
         disabled={!ctaReady}

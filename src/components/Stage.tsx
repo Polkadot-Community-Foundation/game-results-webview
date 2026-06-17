@@ -16,6 +16,7 @@ import { subscribeAttestations } from '../bridge/attestations'
 import { resolveAttestationAsset } from '../attestations/resolver'
 import { revealSpawn, revealBurst, revealChargeCancel } from '../reveal3d/revealTimeline'
 import { cardStore } from '../anim/cardStore'
+import type { ShelfFlyItem } from '../anim/shelfFly'
 import { sfx } from '../audio/engine'
 import { haptic } from '../haptics/engine'
 import { prefersReducedMotion } from '../anim/easings'
@@ -33,6 +34,7 @@ export interface CardData {
   badgeSrc: string           // populated once the attestation resolves; '' = unloaded
   hashHex: string            // empty until the attestation push arrives
   isRare: boolean            // hash-derived rarity; drives reveal amplification
+  isSticker: boolean         // hash-derived: one of the 14 special "sticker" items
   name: string               // resolver-derived item name (no collection); '' until resolved
   collection: string         // resolver-derived collection (first filename token); '' if none
 }
@@ -44,6 +46,7 @@ function emptyCard(i: number): CardData {
     badgeSrc: '',
     hashHex: '',
     isRare: false,
+    isSticker: false,
     name: '',
     collection: ''
   }
@@ -100,9 +103,16 @@ interface StageProps {
   streamSettled?: boolean
   /** Called once the user dismisses the finale (Continue tap). */
   onComplete?: () => void
+  /** Snapshot of the filled shelf badges (image + on-screen rect) taken at the
+   *  moment the reveal completes, so the album-close can fly those exact assets
+   *  from the shelf into the book pages. Fired just before onComplete. */
+  onShelfCaptured?: (items: ShelfFlyItem[]) => void
+  /** Fired once the finale lands (every collectible opened/stored), before the
+   *  Continue button appears — lets the host dismiss the streaming gauge. */
+  onFinale?: () => void
 }
 
-export default function Stage({ frameRef, streamSettled = false, onComplete }: StageProps) {
+export default function Stage({ frameRef, streamSettled = false, onComplete, onShelfCaptured, onFinale }: StageProps) {
   // 10 placeholder cards rendered upfront — always. Each placeholder gets
   // populated in-place when its attestation arrives via
   // window.pushAttestation (see the subscriber effect below). Slots that
@@ -159,6 +169,12 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
   // latest closure (NFTRevealScreen passes a fresh arrow each render).
   const onCompleteRef = useRef(onComplete)
   useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
+  // Same mirroring for the shelf-capture callback so the fail-safe timer below
+  // can snapshot the shelf with the latest closure.
+  const onShelfCapturedRef = useRef(onShelfCaptured)
+  useEffect(() => { onShelfCapturedRef.current = onShelfCaptured }, [onShelfCaptured])
+  const onFinaleRef = useRef(onFinale)
+  useEffect(() => { onFinaleRef.current = onFinale }, [onFinale])
 
   const cardRefs = useRef<Record<number, OrbApi>>({})
   const slotRef = useRef<SlotGridApi>(null)
@@ -255,13 +271,13 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
         return next
       })
       resolveAttestationAsset(payload.hash)
-        .then(({ url, isRare, name, collection }) => {
+        .then(({ url, isRare, isSticker, name, collection }) => {
           if (cancelled) return
           setCards((prev) => {
             const next = prev.slice()
             const c = next[slotIdx]
             if (c) {
-              next[slotIdx] = { ...c, badgeSrc: url, isRare, name, collection }
+              next[slotIdx] = { ...c, badgeSrc: url, isRare, isSticker, name, collection }
             }
             return next
           })
@@ -378,6 +394,9 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
         }
         return next
       })
+      // Snapshot whatever's on the shelf before handing off (the just-queued
+      // setFilled may not be in the DOM yet — capture takes what's rendered).
+      onShelfCapturedRef.current?.(captureShelf())
       onCompleteRef.current?.()
     }, FAILSAFE_IDLE_MS)
     return () => window.clearTimeout(t)
@@ -404,11 +423,40 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
     })
   }, [collectAllActive, readySlots, cards])
 
+  // Snapshot every filled shelf badge's image + on-screen rect so the
+  // album-close can fly those exact assets into the book pages. Read straight
+  // off the live DOM (the badge <img> inside each slot) while the shelf is
+  // still mounted — must run BEFORE onComplete unmounts this screen.
+  function captureShelf(): ShelfFlyItem[] {
+    const api = slotRef.current
+    if (!api) return []
+    const out: ShelfFlyItem[] = []
+    const f = filledRef.current
+    for (let i = 0; i < SHELF_SIZE; i++) {
+      const src = f[i]
+      if (!src) continue
+      const slot = api.getSlotEl(i)
+      if (!slot) continue
+      const badge = (slot.querySelector('.slot-badge') as HTMLElement | null) ?? slot
+      const r = badge.getBoundingClientRect()
+      if (r.width === 0 || r.height === 0) continue
+      out.push({ src, left: r.left, top: r.top, width: r.width, height: r.height })
+    }
+    return out
+  }
+
+  // Capture the shelf, THEN hand off — order matters (capture needs the shelf
+  // still in the DOM). Used by every completion path.
+  function fireComplete(): void {
+    onShelfCaptured?.(captureShelf())
+    onComplete?.()
+  }
+
   function handleStuckContinue(): void {
     // User chose to bail. onComplete fires the nft_reveal_complete
     // event from the caller (NFTRevealScreen wraps Stage).
     setStuckOverlayVisible(false)
-    if (onComplete) onComplete()
+    fireComplete()
   }
 
   // Collect-All snap-fills whatever has resolved so far — the total is
@@ -567,6 +615,9 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
       sfx.play('finale')
       haptic.play('finale')
       setFinaleVisible(true)
+      // Every collectible is now opened/stored — let the host dismiss the
+      // streaming gauge ahead of the Continue button (1.5s below).
+      onFinaleRef.current?.()
       // Continue button appears 1.5s after the finale so the celebration
       // beat lands before the CTA arrives. Held in a ref (not cleared here)
       // so it survives a done→viewing→done round-trip; the unmount effect
@@ -1123,6 +1174,9 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
               data-visible={nameVisible ? 'true' : 'false'}
               aria-hidden={!nameVisible}
             >
+              {current.isSticker && (
+                <div className="card-name-sticker">★ STICKER</div>
+              )}
               {current.collection && (
                 <div className="card-name-collection">{current.collection}</div>
               )}
@@ -1210,8 +1264,8 @@ export default function Stage({ frameRef, streamSettled = false, onComplete }: S
         {continueVisible && seqPhase !== 'viewing' && onComplete && (
           <button
             type="button"
-            className="stage-continue"
-            onClick={onComplete}
+            className="stage-continue cta-primary"
+            onClick={fireComplete}
           >
             Continue
           </button>
