@@ -128,12 +128,12 @@ export default function ChestScreen({ onOpen }: ChestScreenProps) {
       <div className="chest-pattern-bg" aria-hidden="true" />
 
       <header className="chest-header">
-        <div className="chest-eyebrow">Game complete</div>
-        <h1 className="chest-title">See what prizes you got</h1>
-        <p className="chest-sub">
-          The better you played, the more you collected. Plus, find out if
-          you've become a member with a prize draw.
-        </p>
+        {/* Designer-demo headline (the old "Game complete" eyebrow folded into
+            the accented first phrase). */}
+        <h1 className="chest-title">
+          <span className="chest-title-accent">Game complete.</span><br />
+          Claim your prizes.
+        </h1>
       </header>
 
       <button
@@ -153,9 +153,63 @@ export default function ChestScreen({ onOpen }: ChestScreenProps) {
         <img className="chest-layer chest-sparkles" ref={sparklesRef} src="./assets/chest/sparkles.webp" alt="" draggable={false} />
       </button>
 
-      <div className="chest-cta" data-ready={openable ? 'true' : 'false'} aria-live="polite">
-        {openable ? 'Tap to open' : 'Securing your collectibles…'}
+      {/* What's inside, grouped by who gets it — "Everyone" (collectables) and
+          "Members only" (membership + prize draw). Icons use this repo's
+          assets. */}
+      <div className="chest-tiers" aria-hidden="true">
+        <section className="chest-tier">
+          {/* No header on this tier; the empty head keeps the icon row aligned
+              with the "Members only" card. */}
+          <span className="chest-tier-head" aria-hidden="true">{' '}</span>
+          <div className="chest-tier-items">
+            <div className="chest-tier-item">
+              <span className="chest-tier-icon chest-tier-icon--card">
+                <img src="./assets/collectible-cassette.webp" alt="" draggable={false} />
+              </span>
+              <span className="chest-tier-label">Collectibles</span>
+            </div>
+          </div>
+        </section>
+        <section className="chest-tier chest-tier--locked">
+          <span className="chest-tier-head">Members only</span>
+          <div className="chest-tier-items">
+            <div className="chest-tier-item">
+              <span className="chest-tier-icon chest-tier-icon--card">
+                <img src="./assets/membership-card.webp" alt="" draggable={false} />
+              </span>
+              <span className="chest-tier-label">Membership</span>
+            </div>
+            <div className="chest-tier-item">
+              <span className="chest-tier-icon">
+                <img src="./assets/golden_ticket.webp" alt="" draggable={false} />
+              </span>
+              <span className="chest-tier-label">Prize draw</span>
+            </div>
+          </div>
+          {/* Diagonal lock ribbon (top-left → bottom-right) over the greyed
+              members rewards. */}
+          <span className="chest-tier-lock-banner">Play to unlock</span>
+        </section>
       </div>
+
+      {/* Bottom CTA. Disabled with a spinner + "Securing…" until the chest is
+          ready (openable), then becomes the "Claim your prizes" action. */}
+      <button
+        type="button"
+        className="chest-claim-cta cta-primary"
+        onClick={handleOpen}
+        disabled={!openable}
+        data-ready={openable ? 'true' : 'false'}
+      >
+        {openable ? (
+          'Open the chest'
+        ) : (
+          <>
+            <span className="chest-claim-spinner" aria-hidden="true" />
+            Collecting…
+          </>
+        )}
+      </button>
     </div>
   )
 }

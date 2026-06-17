@@ -44,6 +44,35 @@ button {
 }
 button:disabled { cursor: default; }
 
+/* ---------- Primary CTA (designer's gradient button language) ----------
+   The post-game flow's single button system, matching the prototype
+   (Figma 38:5518 — the chest "Open the chest" / reveal "Done" CTA): a
+   full-width rounded-rect with the blue gradient, bold Mulish, layered glow +
+   inset highlights, and a subtle press. Each screen's own rule supplies only
+   positioning/width; this owns the look so every CTA reads as one system. */
+.cta-primary {
+  height: 56px;
+  border: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  box-sizing: border-box;
+  font-family: var(--font-title, 'Mulish'), system-ui, sans-serif;
+  font-weight: 1000;
+  font-size: 22px;
+  letter-spacing: 0.44px;
+  color: #fff;
+  background: linear-gradient(180deg, #3b62fa 0%, #343fb7 52%, #543ca5 100%);
+  box-shadow:
+    0 0 16px rgba(14, 15, 64, 0.85),
+    0 8px 24px rgba(59, 98, 250, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.28);
+  text-shadow: 0 1px 2px rgba(15, 25, 80, 0.55);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.cta-primary:active { transform: scale(0.97); }
+
 .page {
   position: fixed; inset: 0;
   display: grid; place-items: center;
@@ -639,6 +668,20 @@ button:disabled { cursor: default; }
 .card-name-label[data-visible="true"] {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+/* Sticker badge — the 14 special Web3-Summit items. A bright Polkadot-pink
+   pill above the collection eyebrow so a sticker reveal reads as special and
+   distinct from the gold rare treatment. */
+.card-name-sticker {
+  align-self: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(180deg, #ff4db8, #e6007a);
+  box-shadow: 0 3px 12px rgba(230, 0, 122, 0.5);
 }
 /* Collection eyebrow — the item's collection (first filename token),
    small + dim above the name so the name itself stays the focus. */
@@ -3196,32 +3239,16 @@ button:disabled { cursor: default; }
   text-shadow: 0 0 16px rgba(255, 120, 180, 0.35);
 }
 .results-continue {
+  /* Look comes from .cta-primary; this rule only places + sizes the bar. */
   margin-top: auto;
   margin-bottom: 4px;
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  padding: 16px 36px;
-  border-radius: 999px;
-  min-width: 200px;
-  box-shadow:
-    0 12px 30px var(--accent-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  width: 100%;
 }
 .results-continue[data-ready="false"] {
   opacity: 0.5;
   cursor: default;
 }
 .results-continue:active { transform: scale(0.96); }
-.results-continue:hover[data-ready="true"] {
-  box-shadow:
-    0 16px 38px var(--accent-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
 
 /* ---------- Member card ---------- */
 .member-card {
@@ -3230,32 +3257,34 @@ button:disabled { cursor: default; }
   height: 210px;
   max-width: calc(100vw - 56px);
   border-radius: 16px;
-  background:
-    linear-gradient(155deg,
-      #ffffff 0%,
-      #fafafd 40%,
-      #f0eff4 100%);
+  /* Dark placeholder behind the card art while it loads. */
+  background: #0d152b;
   box-shadow:
     0 14px 30px rgba(0, 0, 0, 0.45),
     0 2px 4px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 0 rgba(80, 70, 100, 0.18);
-  color: #1a1430;
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18);
   overflow: hidden;
-  padding: 18px 20px 16px;
   /* The smash entrance animates transform aggressively (scale + y +
-     rotation). `will-change` promotes the card to its own GPU layer
-     so the compositor doesn't repaint the burst behind it each frame.
-     `backface-visibility: hidden` is a belt-and-suspenders layer
-     hint for older mobile browsers. `contain: paint` isolates the
-     card's own subtree (polka pattern, name) from
-     sibling repaints. The CSS transform stays simple (just rotate);
-     GSAP composes its scale/y/rotation animation on top. */
+     rotation). `will-change` promotes the card to its own GPU layer so the
+     compositor doesn't repaint the burst behind it each frame.
+     `backface-visibility: hidden` is a belt-and-suspenders layer hint for
+     older mobile browsers. `contain: paint` isolates the card's subtree from
+     sibling repaints. The CSS transform stays simple (just rotate); GSAP
+     composes its scale/y/rotation animation on top. */
   transform: rotate(-1.2deg);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   will-change: transform, opacity;
   contain: paint;
+}
+/* The iridescent Polkadot card artwork, filling the card frame. */
+.member-card-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .member-card-pattern {
   position: absolute;
@@ -3593,29 +3622,22 @@ button:disabled { cursor: default; }
 
 /* ---------- NFT reveal — Continue button after finale ---------- */
 .stage-continue {
-  position: absolute;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 14px;
-  letter-spacing: 0.04em;
-  padding: 13px 28px;
-  border-radius: 999px;
-  min-width: 180px;
-  z-index: 30;
-  box-shadow:
-    0 10px 28px var(--pink-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  animation: fadeUpIn 0.45s ease-out;
+  /* Look comes from .cta-primary; positioning is (re)asserted after the shared
+     CTA block below so it beats that block's position: relative. Only the
+     entrance lives here — translateY-only, so it can't fight the left/right
+     placement the way the old centring transform did. */
+  animation: fadeUpInBar 0.45s ease-out;
 }
-.stage-continue:active { transform: translateX(-50%) scale(0.96); }
+.stage-continue:active { transform: scale(0.97); }
 @keyframes fadeUpIn {
   from { opacity: 0; transform: translate(-50%, 12px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
+}
+/* Entrance for full-width .cta-primary bars (positioned via left/right, not a
+   centring transform) — translateY only, no -50%. */
+@keyframes fadeUpInBar {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ---------- NFT reveal — stuck-screen recovery overlay ----------
@@ -3863,13 +3885,11 @@ button:disabled { cursor: default; }
 }
 
 .username-cta {
+  /* Look comes from .cta-primary; this rule only places + sizes the bar
+     (bottom-pinned, full-width — like the other screens' CTAs). */
   margin-top: auto;
   margin-bottom: 0;
-  padding: 16px 36px;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  border-radius: 999px;
-  min-width: 220px;
+  width: 100%;
   z-index: 2;
 }
 .username-cta:active { transform: scale(0.96); }
@@ -3961,6 +3981,42 @@ button:disabled { cursor: default; }
   padding: 32px 24px;
   z-index: 5;
 }
+/* Prize-draw winner backdrop: the rainbow burst fills the screen; the headline
+   + sub sit on a dark banner (below) so they read over the bright burst. */
+.done-screen.is-celebrate { background: #05030f; }
+.done-burst-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  pointer-events: none;
+}
+.done-screen.is-celebrate > :not(.done-burst-bg) {
+  position: relative;
+  z-index: 2;
+}
+/* Black semi-transparent banner behind the winner headline + sub. */
+.done-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  /* Full-bleed band: stretch to the content width, then bleed past the
+     screen's 24px side padding to reach both edges. */
+  align-self: stretch;
+  margin-left: -24px;
+  margin-right: -24px;
+  padding: 32px 24px;
+  /* Dark band that fades (soft "blurred") into the burst at the top + bottom
+     edges; solid behind the text. */
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.62) 24%,
+    rgba(0, 0, 0, 0.62) 76%,
+    transparent 100%);
+}
 .done-headline {
   font-family: var(--font-title);
   font-weight: 900;
@@ -3978,18 +4034,8 @@ button:disabled { cursor: default; }
   letter-spacing: 0.02em;
 }
 .done-cta {
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  padding: 16px 44px;
-  border-radius: 999px;
-  min-width: 200px;
-  box-shadow:
-    0 12px 30px var(--pink-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  /* Look comes from .cta-primary; this rule only sizes the bar. */
+  width: 100%;
 }
 .done-cta:active { transform: scale(0.96); }
 
@@ -4017,9 +4063,11 @@ button:disabled { cursor: default; }
   font-size: 14px;
   letter-spacing: 0.02em;
   color: rgba(230, 226, 250, 0.78);
-  /* Pulled up to sit close under the headline; extra negative offset absorbs
-     the headline's new bottom padding (added to un-clip the descender). */
-  margin-top: -20px;
+  /* Readable over the bright burst backdrop. */
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+  /* Sits just under the headline; the banner's gap handles the spacing (the
+     old negative margin overlapped the headline inside the banner). */
+  margin-top: 0;
 }
 .done-burst {
   position: absolute;
@@ -4079,21 +4127,9 @@ button:disabled { cursor: default; }
   margin: 0;
 }
 .handoff-cta {
+  /* Look comes from .cta-primary; this rule only places + sizes the bar. */
   margin-top: 8px;
-  border: 0;
-  cursor: pointer;
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  padding: 16px 44px;
-  border-radius: 999px;
-  min-width: 200px;
-  box-shadow:
-    0 12px 30px var(--pink-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  width: 100%;
 }
 .handoff-cta:active { transform: scale(0.96); }
 
@@ -4131,21 +4167,9 @@ button:disabled { cursor: default; }
   margin: 0;
 }
 .noattest-cta {
+  /* Look comes from .cta-primary; this rule only places + sizes the bar. */
   margin-top: 8px;
-  border: 0;
-  cursor: pointer;
-  background: var(--pink);
-  color: #fff;
-  font-family: var(--font-title);
-  font-weight: 700;
-  font-size: 15px;
-  letter-spacing: 0.04em;
-  padding: 16px 44px;
-  border-radius: 999px;
-  min-width: 200px;
-  box-shadow:
-    0 12px 30px var(--pink-glow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  width: 100%;
 }
 .noattest-cta:active { transform: scale(0.96); }
 .noattest-cta:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: 2px; }
@@ -4332,25 +4356,20 @@ button:disabled { cursor: default; }
      it re-asserted below this block. */
   position: relative;
   overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    #7686ff 0%,
-    #5163f5 35%,
-    #3a3fd5 70%,
-    #2c25b0 100%
-  );
+  /* Designer's CTA gradient (Figma 38:5518): blue → indigo → purple. This was
+     a flat all-blue 4-stop (#7686ff→#2c25b0) — that's what dropped the purple.
+     Same gradient as .cta-primary so every CTA reads identically. */
+  background: linear-gradient(180deg, #3b62fa 0%, #343fb7 52%, #543ca5 100%);
   color: #fff;
   font-family: var(--font-title);
-  font-weight: 700;
+  font-weight: 1000;
   /* Dark-blue text-shadow seats the glyphs into the surface. */
   text-shadow: 0 1px 2px rgba(15, 25, 80, 0.55);
-  /* Layered shadows: outer blue glow + soft drop + inner top highlight +
-     inner bottom-rim shadow. Same recipe as Collect-All; gives a tactile
-     bevel without a wrapper element. */
+  /* Layered glow + inset highlights — matches the prototype CTA shadow. */
   box-shadow:
-    0 10px 24px rgba(70, 80, 220, 0.45),
-    0 2px 4px rgba(0, 0, 0, 0.20),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 0 16px rgba(14, 15, 64, 0.85),
+    0 8px 24px rgba(59, 98, 250, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
     inset 0 -1px 2px rgba(0, 0, 0, 0.28);
   will-change: transform, opacity;
   border: 0;
@@ -4423,14 +4442,17 @@ button:disabled { cursor: default; }
 /* Per-button positioning overrides — must come AFTER the shared CTA
    block so they win the cascade for `position`. */
 .stage-continue {
+  /* Re-assert absolute + full-width AFTER the shared CTA block (which sets
+     position: relative). Full-width bar — NO left:50%/translateX centring: that
+     static transform fought the entrance animation (which animates translateY)
+     and made the button jump sideways as it loaded in. */
   position: absolute;
-  /* Clear the home indicator / gesture bar (floors at 28px). */
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
-  left: 50%;
-  transform: translateX(-50%);
+  left: 16px;
+  right: 16px;
+  bottom: max(calc(env(safe-area-inset-bottom, 0px) + 16px), 34px);
   z-index: 30;
 }
-.stage-continue:active { transform: translateX(-50%) scale(0.96); }
+.stage-continue:active { transform: scale(0.97); }
 
 /* Loss-path Continue button: same bottom-anchored placement as the
    win-side Claim CTA. Lives here (after the shared CTA block) so
@@ -4611,10 +4633,12 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Content flows from the top; the bottom CTA (margin-top:auto) pins to the
+     base, like the other screens. */
+  justify-content: flex-start;
   gap: 22px;
   padding: max(74px, calc(env(safe-area-inset-top, 0px) + 22px)) 24px
-           calc(env(safe-area-inset-bottom, 0px) + 32px);
+           calc(env(safe-area-inset-bottom, 0px) + 24px);
   text-align: center;
   color: #fff;
   overflow: hidden;
@@ -4634,9 +4658,45 @@ button:disabled { cursor: default; }
   color: var(--gold, #f6c869); opacity: 0.92;
 }
 .chest-title {
-  margin: 8px 0 0;
+  /* Demo hero title, a touch smaller to make room for the bottom CTA. */
+  margin: 0;
   font-family: var(--font-title, 'Mulish'), system-ui, sans-serif;
-  font-weight: 900; font-size: 26px; line-height: 1.1;
+  font-weight: 900; font-size: 34px; line-height: 40px;
+  color: #fff;
+}
+/* Gold first phrase ("Game complete.") — matches the designer demo. */
+.chest-title-accent { color: var(--gold, #f6c869); }
+
+/* Bottom CTA on the chest screen: full-width bar pinned to the base (look from
+   .cta-primary). Spinner + "Securing…" while disabled, then "Claim your
+   prizes" once the chest is ready. */
+.chest-claim-cta {
+  /* Pushed to the bottom by the chest's auto bottom-margin; the tiers sit
+     just above it. */
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+/* Greyed-out disabled state for any primary CTA. */
+.cta-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Little ring spinner for the "Securing…" state. */
+.chest-claim-spinner {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: chestClaimSpin 0.7s linear infinite;
+}
+@keyframes chestClaimSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .chest-claim-spinner { animation: none; }
 }
 .chest-sub {
   margin: 10px 0 0; font: 13px/1.5 var(--font-ui), system-ui, sans-serif;
@@ -4646,6 +4706,11 @@ button:disabled { cursor: default; }
   position: relative; z-index: 2;
   width: min(260px, 64vw); height: min(220px, 54vw);
   border: 0; background: none; padding: 0; cursor: default;
+  /* Auto top + bottom margins center the chest on the screen: the free space
+     splits evenly above and below it, so the title stays at the top while the
+     reward tiers + CTA are pushed to the bottom (tiers just above the CTA). */
+  margin-top: auto;
+  margin-bottom: auto;
   --brim: 0.85; /* resting glow/sparkle strength; GSAP bursts it to 1 on open. */
 }
 .chest[data-openable="true"] { cursor: pointer; }
@@ -4669,12 +4734,132 @@ button:disabled { cursor: default; }
 .chest[data-openable="true"] .chest-glow { animation: chestReadyPulse 1.6s ease-in-out infinite; }
 @keyframes chestReadyPulse { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
 .chest-cta {
+  /* Match the reveal shelf's tap prompt (.action-label): big white bold with a
+     soft blue glow, in the inherited UI font (not the old uppercase mono). The
+     "Securing…" loading state sits dimmed; it brightens to full white once the
+     chest is tappable. */
   position: relative; z-index: 2; min-height: 20px;
-  font: 800 13px/1 ui-monospace, "SF Mono", Menlo, monospace;
-  letter-spacing: 0.18em; text-transform: uppercase;
-  color: rgba(225, 222, 255, 0.55); transition: color 0.3s ease;
+  text-align: center;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.55),
+    0 0 20px rgba(130, 180, 255, 0.25);
+  opacity: 0.55;
+  transition: opacity 0.3s ease;
 }
-.chest-cta[data-ready="true"] { color: var(--gold, #f6c869); }
+.chest-cta[data-ready="true"] { opacity: 1; }
+
+/* ── Reward tiers (what's inside the chest) ───────────────────────────────
+   Two grouped cards per the designer layout: "Everyone" (collectables) and
+   "Members only" (membership + prize draw). Card header on top, a circular
+   icon per item, label beneath. The right card holds two items so it reads
+   wider, like the reference. */
+.chest-tiers {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 10px;
+}
+.chest-tier {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 14px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.16);
+}
+.chest-tier-head {
+  font-family: var(--font-ui), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  /* Reserve the row even when empty (the headerless "Collectibles" tier) so
+     both cards' icon rows line up. */
+  min-height: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+.chest-tier-items {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.chest-tier-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 80px;
+}
+.chest-tier-icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  overflow: hidden;
+}
+.chest-tier-icon img {
+  width: 74%;
+  height: 74%;
+  object-fit: contain;
+}
+/* Card-style icon (e.g. the membership card from the iOS app) — a landscape
+   card, so fill the ring rather than letterboxing it tiny. */
+.chest-tier-icon--card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.chest-tier-label {
+  font-family: var(--font-ui), system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+/* Locked "Members only" tier: grey out the rewards and lay a diagonal
+   "Play to unlock" ribbon across it (top-left → bottom-right). */
+.chest-tier--locked {
+  position: relative;
+  overflow: hidden; /* clip the ribbon ends to the card */
+}
+.chest-tier--locked .chest-tier-head,
+.chest-tier--locked .chest-tier-items {
+  filter: grayscale(1);
+  opacity: 0.4;
+}
+.chest-tier-lock-banner {
+  position: absolute;
+  top: 50%;
+  left: -25%;
+  right: -25%;
+  z-index: 2;
+  transform: translateY(-50%) rotate(32deg);
+  padding: 5px 0;
+  text-align: center;
+  background: rgba(10, 12, 32, 0.92);
+  color: #fff;
+  font-family: var(--font-ui), system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chest[data-openable="true"] .chest-glow { animation: none; }
 }
@@ -4856,21 +5041,10 @@ button:disabled { cursor: default; }
 }
 
 .draw-reveal-cta {
+  /* Look comes from .cta-primary (matches the prototype's blue draw CTA);
+     this rule only places + sizes the bar. */
   margin-top: 18px;
-  padding: 16px 44px;
-  background: linear-gradient(180deg, #f6c869, #d29539);
-  color: #2a0807;
-  border: none;
-  border-radius: 999px;
-  font: 800 13px/1 ui-monospace, "SF Mono", Menlo, monospace;
-  letter-spacing: 0.32em;
-  cursor: pointer;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.45),
-    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
-    0 8px 24px rgba(0, 0, 0, 0.5),
-    0 2px 6px rgba(0, 0, 0, 0.4);
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  width: 100%;
   z-index: 3;
 }
 .draw-reveal-cta:hover { filter: brightness(1.06); }
@@ -5676,4 +5850,241 @@ body.is-embedded .phone-status-bar {
 @keyframes infotipPop { from { opacity: 0; transform: translateY(8px) scale(0.96); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   .infotip-overlay, .infotip-card { animation: none !important; }
+}
+
+/* ---------- Album-close sequence (Figma 161:3292) ----------
+   The collected items as an OPEN album spread (collection on the right page,
+   the front cover laid open on the left), then the cover swings shut about the
+   left spine to a centred closed album. Inside pages = the user's real
+   collectibles; outer cover = the designer's collage (AlbumCover). */
+.album-close {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: #141023;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1500px;
+  perspective-origin: 50% 50%;
+  opacity: 0;
+}
+/* Owns scale + the x-shift that keeps the open spread (then the closed
+   book) centred. */
+.album-stage {
+  position: relative;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+/* Headline shown once the album is closed. */
+.album-done-title {
+  position: absolute;
+  top: max(104px, calc(env(safe-area-inset-top, 0px) + 64px));
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0 24px;
+  font-family: var(--font-title, 'Mulish'), system-ui, sans-serif;
+  font-weight: 900;
+  font-size: 40px;
+  line-height: 48px;
+  letter-spacing: -0.01em;
+  text-align: center;
+  color: #fff;
+}
+/* Continue CTA — shared blue gradient, pinned to the bottom. */
+.album-done-cta {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: max(calc(env(safe-area-inset-bottom, 0px) + 16px), 34px);
+  height: 56px;
+  border: none;
+  border-radius: 16px;
+  font-family: var(--font-title, 'Mulish'), system-ui, sans-serif;
+  font-weight: 1000;
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: 0.44px;
+  color: #fff;
+  cursor: pointer;
+  background: linear-gradient(180deg, #3b62fa 0%, #343fb7 52%, #543ca5 100%);
+  text-shadow: 0 1px 2px rgba(15, 25, 80, 0.55);
+  box-shadow:
+    0 0 16px rgba(14, 15, 64, 0.85),
+    0 8px 24px rgba(59, 98, 250, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.28);
+}
+.album-done-cta:active { transform: scale(0.98); }
+/* One page = the closed-book footprint. */
+.album {
+  position: relative;
+  width: 180px;
+  height: 240px;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+/* Collection page — the base (the right page when the book is open). */
+.album-page-grid {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #16223f 0%, #0d152b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+/* Front cover — overlays the collection, hinged at the LEFT spine. */
+.album-cover {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center; /* spine = left edge */
+  transform-style: preserve-3d;
+}
+.album-cover-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+/* Inside of the front cover — shown while the album is open. */
+.album-cover-face--inner {
+  transform: rotateY(180deg);
+  background: linear-gradient(180deg, #16223f 0%, #0d152b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+/* Outer cover art — revealed as the book closes. */
+.album-cover-face--outer {
+  background: #323232;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+}
+/* Collage cover — graphite gradient + stickers + title. */
+.album-cover-art {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  background: #2c2c2c; /* placeholder under the cover art while it loads */
+}
+/* The pre-baked color cover artwork, filling the closed-book face. */
+.album-cover-art-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.album-cover-art-sticker {
+  position: absolute;
+  aspect-ratio: 1;
+  object-fit: contain;
+  /* Full-color stickers (no desaturation). */
+  pointer-events: none;
+}
+.album-cover-art-title {
+  position: absolute;
+  left: 7.7%;
+  top: 6.6%;
+  transform: translateY(-50%);
+  z-index: 2;
+  font-family: 'Marcellus', 'Times New Roman', serif;
+  font-weight: 400;
+  font-size: 7.7cqw;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: #8a8a8a;
+  text-shadow: 0 0.3px 0.2px #c8c8c8, 0 -0.3px 0.3px #1b1b1b;
+}
+/* Thin inner rim — the hard-light outline from the cover render. */
+.album-cover-art-rim {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  border: 1px solid rgba(185, 185, 185, 0.5);
+  mix-blend-mode: hard-light;
+  pointer-events: none;
+}
+/* Each page holds half the collection — centred so the odd last item is
+   never clipped. */
+.album-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 18px;
+  width: 100%;
+  height: 100%;
+  align-content: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.album-cell {
+  width: 54px;
+  height: 54px;
+  aspect-ratio: 1;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
+}
+/* Shared-element fly layer — clones of the shelf badges animate across this
+   flat overlay (NOT inside the scaled/3D book) into the album page cells, then
+   remove themselves on landing. Sits above the open book; coords are relative
+   to .album-close, matching the viewport rects captured from the shelf. */
+.album-fly-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+.album-fly-badge {
+  position: absolute;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
+  will-change: transform;
+}
+
+/* ---------- Attestation gauge (lower-left HUD) ----------
+   A segmented bar showing how many collectibles have streamed in from native
+   so far — the visual replacement for a numeric "X / N" readout. One segment
+   per shelf slot; arrived slots light up blue as they land. */
+.att-gauge {
+  position: absolute;
+  left: max(16px, calc(env(safe-area-inset-left, 0px) + 14px));
+  bottom: max(22px, calc(env(safe-area-inset-bottom, 0px) + 18px));
+  z-index: 14;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+/* Once every collectible is opened (finale), fade the gauge out before the
+   Continue button appears. */
+.att-gauge[data-hidden="true"] {
+  opacity: 0;
+}
+.att-gauge-track {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 7px 9px;
+  border-radius: 11px;
+  background: rgba(12, 14, 32, 0.46);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.att-gauge-seg {
+  width: 4px;
+  height: 15px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.16);
+  transition: background 0.35s ease, box-shadow 0.35s ease;
+}
+.att-gauge-seg.is-filled {
+  background: linear-gradient(180deg, #8fb6ff 0%, #3b62fa 100%);
+  box-shadow: 0 0 8px rgba(59, 98, 250, 0.75);
+}
+@media (prefers-reduced-motion: reduce) {
+  .att-gauge-seg { transition: none; }
 }

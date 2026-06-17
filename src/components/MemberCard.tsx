@@ -1,7 +1,7 @@
-// MemberCard — glossy white plastic membership card. Shows the Polkadot
-// brand mark + chip and the user's display name. (Rank label and the
-// games-until-next-rank progress stripe were removed when the rank/
-// ranking system was retired; the card is now a plain membership card.)
+// MemberCard — the Polkadot membership card. Renders the iridescent card
+// graphic from the iOS app (public/assets/membership-card.webp) inside the
+// animated card frame (smash-in + promotion glow). The holder's name lives in
+// the results headline ("Welcome, …"), so the card itself is just the artwork.
 
 import { useEffect, useRef } from 'react'
 import { gsap } from 'gsap'
@@ -13,7 +13,7 @@ interface MemberCardProps {
   promoted?: boolean
 }
 
-export default function MemberCard({ displayName, promoted }: MemberCardProps) {
+export default function MemberCard({ promoted }: MemberCardProps) {
   const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -111,19 +111,7 @@ export default function MemberCard({ displayName, promoted }: MemberCardProps) {
 
   return (
     <div className="member-card" ref={rootRef}>
-      {/* Polkadot subtle background watermark */}
-      <div className="member-card-pattern" aria-hidden="true" />
-
-      {/* Top row — Polkadot eyebrow + chip */}
-      <div className="member-card-top">
-        <span className="member-card-brand">POLKADOT</span>
-        <span className="member-card-chip" aria-hidden="true" />
-      </div>
-
-      {/* Display name */}
-      {displayName && (
-        <div className="member-card-name">{displayName}</div>
-      )}
+      <img className="member-card-art" src="./assets/membership-card.webp" alt="" draggable={false} />
     </div>
   )
 }

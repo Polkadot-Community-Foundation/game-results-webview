@@ -14,15 +14,20 @@ import { useEffect } from 'react'
 import Stage, { SHELF_SIZE } from '../components/Stage'
 import { sendFlowEvent } from '../bridge/send'
 import { onShelfAttestationCount } from '../bridge/attestations'
+import type { ShelfFlyItem } from '../anim/shelfFly'
 
 interface NFTRevealScreenProps {
   frameRef: RefObject<HTMLDivElement>
   /** True once the webview stops waiting for more cards. Drives the finale. */
   streamSettled: boolean
   onContinue: () => void
+  /** Forwarded to Stage — the shelf snapshot for the album-close fly. */
+  onShelfCaptured?: (items: ShelfFlyItem[]) => void
+  /** Forwarded to Stage — fires when the reveal finale lands (all opened). */
+  onFinale?: () => void
 }
 
-export default function NFTRevealScreen({ frameRef, streamSettled, onContinue }: NFTRevealScreenProps) {
+export default function NFTRevealScreen({ frameRef, streamSettled, onContinue, onShelfCaptured, onFinale }: NFTRevealScreenProps) {
   useEffect(() => {
     // count = on-shelf attestations received so far (no known total upfront;
     // off-shelf indices are dropped by the shelf, so they don't count here).
@@ -33,6 +38,8 @@ export default function NFTRevealScreen({ frameRef, streamSettled, onContinue }:
     <Stage
       frameRef={frameRef}
       streamSettled={streamSettled}
+      {...(onShelfCaptured ? { onShelfCaptured } : {})}
+      {...(onFinale ? { onFinale } : {})}
       onComplete={() => {
         sendFlowEvent({ type: 'flow.nft_reveal_complete' })
         onContinue()
