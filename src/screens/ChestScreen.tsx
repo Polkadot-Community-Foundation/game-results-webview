@@ -166,7 +166,7 @@ export default function ChestScreen({ onOpen }: ChestScreenProps) {
           <div className="chest-tier-items">
             <div className="chest-tier-item">
               <span className="chest-tier-icon">
-                <img src="./assets/badges/01.webp" alt="" draggable={false} />
+                <img src="./assets/album/s06.webp" alt="" draggable={false} />
               </span>
               <span className="chest-tier-label">Collectables</span>
             </div>

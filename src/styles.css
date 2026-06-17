@@ -5847,8 +5847,7 @@ body.is-embedded .phone-status-bar {
   position: absolute;
   aspect-ratio: 1;
   object-fit: contain;
-  /* Match the muted, near-monochrome look of the cover render. */
-  filter: grayscale(0.85) brightness(0.92) contrast(1.05);
+  /* Full-color stickers (no desaturation). */
   pointer-events: none;
 }
 .album-cover-art-title {
