@@ -45,18 +45,16 @@ function winningSetExcluding(ticket: string): string[] {
  *  for the dev mocks. Production gets the real count. */
 const MOCK_TOTAL_ENTRIES = 1337
 
-/** ISO timestamp for the next Monday at 12:00 UTC — used by all mocks
- *  so the result-stage countdown has a plausible value to render. */
-function nextWeeklyDrawIso(): string {
+/** ISO timestamp for the next scheduled draw. The game (and its draw) runs
+ *  twice a day, at 00:00 and 12:00 UTC, so the result-stage countdown has a
+ *  plausible near-future value to render. */
+function nextDrawIso(): string {
   const now = new Date()
   const target = new Date(Date.UTC(
-    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0
   ))
-  const dayOfWeek = target.getUTCDay()
-  if (dayOfWeek !== 1 || target <= now) {
-    const daysUntilMonday = ((8 - dayOfWeek) % 7) || 7
-    target.setUTCDate(target.getUTCDate() + daysUntilMonday)
-  }
+  // Advance in 12-hour steps to the next slot strictly in the future.
+  while (target <= now) target.setUTCHours(target.getUTCHours() + 12)
   return target.toISOString()
 }
 
@@ -75,7 +73,7 @@ function passJustBecameMemberWin(): GameResultsInput {
     prizeDraw: {
       prizeUsd: 200,
       totalEntries: MOCK_TOTAL_ENTRIES,
-      nextDrawAt: nextWeeklyDrawIso(),
+      nextDrawAt: nextDrawIso(),
       userTicket,
       winningTickets: winningSetIncluding(userTicket),
       ticketDistance: 0,
@@ -109,7 +107,7 @@ function passJustBecameMemberLoss(): GameResultsInput {
     prizeDraw: {
       prizeUsd: 2000,
       totalEntries: MOCK_TOTAL_ENTRIES,
-      nextDrawAt: nextWeeklyDrawIso(),
+      nextDrawAt: nextDrawIso(),
       userTicket,
       winningTickets: winningSetExcluding(userTicket),
       ticketDistance: 7,            // close-call near-miss
@@ -126,7 +124,7 @@ function passJustBecameMemberLoss(): GameResultsInput {
   }
 }
 
-// Existing member who passed and WON the weekly draw.
+// Existing member who passed and WON the draw.
 function memberWin(): GameResultsInput {
   const userTicket = random32ByteHex()
   return {
@@ -142,7 +140,7 @@ function memberWin(): GameResultsInput {
     prizeDraw: {
       prizeUsd: 200,
       totalEntries: MOCK_TOTAL_ENTRIES,
-      nextDrawAt: nextWeeklyDrawIso(),
+      nextDrawAt: nextDrawIso(),
       userTicket,
       winningTickets: winningSetIncluding(userTicket),
       ticketDistance: 0,
@@ -152,7 +150,7 @@ function memberWin(): GameResultsInput {
   }
 }
 
-// Existing member who passed and LOST the weekly draw. ticketDistance
+// Existing member who passed and LOST the draw. ticketDistance
 // is webview-simulated from the userTicket hash (see
 // src/draw/ticketDistance.ts), so the value here is unused for the
 // visual — it just needs to be a plausible non-zero value to satisfy
@@ -172,7 +170,7 @@ function memberLose(): GameResultsInput {
     prizeDraw: {
       prizeUsd: 200,
       totalEntries: MOCK_TOTAL_ENTRIES,
-      nextDrawAt: nextWeeklyDrawIso(),
+      nextDrawAt: nextDrawIso(),
       userTicket,
       winningTickets: winningSetExcluding(userTicket),
       ticketDistance: 1,    // any non-zero value; webview simulates the real one
@@ -183,7 +181,7 @@ function memberLose(): GameResultsInput {
 }
 
 // Existing member who FAILED the game. Members keep their rank on
-// failure (no demotion), but they lose draw eligibility for the week
+// failure (no demotion), but they lose draw eligibility for that game
 // (per the passed → draw invariant) and only receive partial cards
 // via the NFT reveal.
 function memberFail(): GameResultsInput {
@@ -274,7 +272,7 @@ function passJustBecameMemberNameTaken(): GameResultsInput {
     prizeDraw: {
       prizeUsd: 200,
       totalEntries: MOCK_TOTAL_ENTRIES,
-      nextDrawAt: nextWeeklyDrawIso(),
+      nextDrawAt: nextDrawIso(),
       userTicket,
       winningTickets: winningSetIncluding(userTicket),
       ticketDistance: 0,
@@ -307,7 +305,7 @@ function passJustBecameMemberUnknown(): GameResultsInput {
     prizeDraw: {
       prizeUsd: 200,
       totalEntries: MOCK_TOTAL_ENTRIES,
-      nextDrawAt: nextWeeklyDrawIso(),
+      nextDrawAt: nextDrawIso(),
       userTicket,
       winningTickets: winningSetIncluding(userTicket),
       ticketDistance: 0,
@@ -340,7 +338,7 @@ function passJustBecameMemberAsyncAvailability(): GameResultsInput {
     prizeDraw: {
       prizeUsd: 200,
       totalEntries: MOCK_TOTAL_ENTRIES,
-      nextDrawAt: nextWeeklyDrawIso(),
+      nextDrawAt: nextDrawIso(),
       userTicket,
       winningTickets: winningSetIncluding(userTicket),
       ticketDistance: 0,
@@ -356,7 +354,7 @@ function passJustBecameMemberAsyncAvailability(): GameResultsInput {
 }
 
 // (Removed `passNoPrizeNewMember`: it modeled "new member who passed
-// but received no draw this week", which violates the
+// but received no draw this game", which violates the
 // passed+member → draw invariant. Such a state shouldn't arise from
 // native, so there's no need to exercise the path.)
 
@@ -377,7 +375,7 @@ export const DEV_MOCKS: Array<{ label: string; build: () => GameResultsInput }> 
   { label: 'new member + name taken',         build: passJustBecameMemberNameTaken },
   { label: 'new member + unknown avail',      build: passJustBecameMemberUnknown },
   { label: 'new member + async avail',        build: passJustBecameMemberAsyncAvailability },
-  // Candidate paths (passed candidates don't get the weekly draw —
+  // Candidate paths (passed candidates don't get the draw —
   // it's a members-only benefit; see NATIVE_SPEC §3.3).
   { label: 'first ever (candidate)',          build: passFirstEver },
   { label: 'candidate failed (3/10)',         build: candidateFail },

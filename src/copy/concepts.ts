@@ -14,11 +14,11 @@ export interface Concept {
 export const CONCEPTS = {
   membership: {
     title: 'Membership',
-    body: "Becoming a member means you've shown you're a real, unique player. Members are automatically entered in the weekly CASH prize draw, and can claim a custom username. It's a one-time step."
+    body: "Becoming a member means you've shown you're a real, unique player. Members are automatically entered in the CASH prize draw, and can claim a custom username. It's a one-time step."
   },
   prizeDraw: {
-    title: 'Weekly prize draw',
-    body: "Every week, members are automatically entered into a draw for CASH. If your ticket's drawn, you win. There's nothing to enter."
+    title: 'Prize draw',
+    body: "Every game, members are automatically entered into a draw for CASH. If your ticket's drawn, you win. There's nothing to enter."
   },
   // (The CASH concept is now conveyed by the coin-deposit animation on the
   // win result screen rather than a tooltip, so no `cash` entry here.)

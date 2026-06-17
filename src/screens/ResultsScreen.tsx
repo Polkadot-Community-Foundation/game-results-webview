@@ -144,7 +144,7 @@ export default function ResultsScreen({ outcome, displayName, collectedCount, on
   //   - for players heading into the prize draw, INTRODUCES it (so the draw
   //     isn't a surprise), and
   //   - for failed players, a forward nudge — NEVER a "you lost" framing.
-  //     "Not your week" / loss language is reserved for the prize-draw result
+  //     "Not this time" / loss language is reserved for the prize-draw result
   //     (ResultHero "no win this time"), which only people who actually saw
   //     the draw reach.
   const passed = outcome.passed
@@ -160,7 +160,7 @@ export default function ResultsScreen({ outcome, displayName, collectedCount, on
       ? `Welcome, ${displayName ?? 'member'}.`
       : `Nice run.`
     summarySub = goingToDraw
-      ? `You collected ${haul}, and you've earned a spot in this week's prize draw.`
+      ? `You collected ${haul}, and you've earned a spot in the prize draw.`
       : `You collected ${haul}.`
   } else if (collectedCount > 0) {
     // Failed the game but earned collectibles — celebrate the haul, no loss

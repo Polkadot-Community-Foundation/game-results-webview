@@ -2478,7 +2478,7 @@ button:disabled { cursor: default; }
 /* ============================================================================
    LOTTO DRAW
    ----------------------------------------------------------------------------
-   Number-reveal mechanic for $200 weekly / $2000 monthly draws. Lives as
+   Number-reveal mechanic for $200 normal / $2000 bonus draws. Lives as
    its own screen alongside Stage; selected via App-level state.
 
    Compositor-only rules: tumbler strips translate, glow opacity-fades,
@@ -4524,7 +4524,7 @@ button:disabled { cursor: default; }
 
 /* New-member consolation — only on prize-draw loss with justBecameMember.
    Sits above the Continue CTA (around bottom: 84px so it clears the
-   button) so the "membership unlocked, better luck next week" beat is
+   button) so the "membership unlocked, better luck next time" beat is
    visible alongside the action. Quiet styling: small, low-contrast, no
    competing for attention with the ticket. Fades in via the data-ready
    gate so it appears in sync with the CTA. */
@@ -4567,7 +4567,7 @@ button:disabled { cursor: default; }
 .draw-consolation-eyebrow[data-ready="true"] { opacity: 1; }
 
 .draw-consolation-body {
-  /* "Better luck on the draw next week." — quieter aside, sits below
+  /* "Better luck on the draw next time." — quieter aside, sits below
      the loss ticket and is nudged down a bit from the visual centerline
      to give the membership-unlocked moment above the ticket more
      emotional weight. */

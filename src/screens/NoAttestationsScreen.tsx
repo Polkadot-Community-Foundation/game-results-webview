@@ -36,7 +36,7 @@ export default function NoAttestationsScreen({ onDone }: NoAttestationsScreenPro
       <h1 className="noattest-headline">
         Nobody thought you were human enough this time.
       </h1>
-      <p className="noattest-sub">Try again next week!</p>
+      <p className="noattest-sub">Try again next time!</p>
       <button type="button" className="noattest-cta cta-primary" onClick={onDone}>
         Got it
       </button>

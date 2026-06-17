@@ -366,32 +366,42 @@ export default function Stage({ frameRef, streamSettled = false, onComplete, onS
 
   // ── Per-game sticker guarantee ───────────────────────────────────────────
   // We can't change how attestation hashes are minted, so we deliver the "every
-  // game grants a sticker" promise at presentation time. Once the stream has
-  // settled (the full game batch is known) and the user is resting on the shelf
-  // (so we never mutate a card mid-reveal), if NO card resolved to a sticker
-  // organically we promote one: the lexicographically-smallest-hash card that
-  // hasn't been stored yet, re-resolved into the sticker pool. The choice is a
-  // pure function of the batch's hashes, so the Pocket (which groups owned NFTs
-  // by mint batch and applies the same rule) promotes the same hash. A small
-  // number of games already have an organic sticker AND get nothing extra here;
-  // a smaller number end up with a bonus sticker — both are fine.
+  // game grants a sticker" promise at presentation time: once the stream has
+  // settled, if NO card resolved to a sticker organically, we promote one — the
+  // lexicographically-smallest-hash card, re-resolved into the sticker pool.
+  // The choice is a pure function of the batch's hashes, so the Pocket (which
+  // groups owned NFTs by mint batch and applies the same rule) promotes the
+  // same hash.
+  //
+  // It promotes an UNREVEALED card when one exists (no visual change), but
+  // falls back to an already-stored card otherwise — so the guarantee holds
+  // even when the user has stored everything before the stream settles. That's
+  // the single-/few-attestation case: the stream settles only after the stall
+  // timeout (the earned count is below the expected count), by which point the
+  // lone card is already on the shelf. ANY attestation must yield a sticker.
   useEffect(() => {
     if (!CATALOGUE_HAS_STICKERS) return
     if (stickerSettledRef.current) return
-    if (!streamSettled || seqPhase !== 'browsing') return
+    if (!streamSettled) return
+    // Never mutate a card mid-flip; this re-runs once the phase leaves 'revealing'.
+    if (seqPhase === 'revealing') return
     const cs = cardsRef.current
+    const withHash = cs.filter((c) => c.hashHex)
+    if (withHash.length === 0) return // skunk: no attestations → no sticker
     // Guarantee already met by an organic sticker anywhere in the batch.
-    if (cs.some((c) => c.hashHex && c.isSticker)) { stickerSettledRef.current = true; return }
+    if (withHash.some((c) => c.isSticker)) { stickerSettledRef.current = true; return }
     const fl = filledRef.current
-    // Promote among cards that have arrived but aren't stored/seen yet.
-    const eligible = cs.filter((c) => c.hashHex && !fl[c.id])
-    if (eligible.length === 0) return
     const norm = (h: string) =>
       (h.startsWith('0x') || h.startsWith('0X') ? h.slice(2) : h).toLowerCase()
-    let target = eligible[0]!
-    for (const c of eligible) if (norm(c.hashHex) < norm(target.hashHex)) target = c
+    // Prefer an unrevealed card; fall back to all cards (incl. stored) so a
+    // single stored attestation still gets promoted.
+    const unrevealed = withHash.filter((c) => !fl[c.id])
+    const pool = unrevealed.length > 0 ? unrevealed : withHash
+    let target = pool[0]!
+    for (const c of pool) if (norm(c.hashHex) < norm(target.hashHex)) target = c
     stickerSettledRef.current = true
     const id = target.id
+    const wasStored = !!fl[id]
     resolveAttestationAsset(target.hashHex, true)
       .then(async ({ url, isRare, isSticker, name, collection }) => {
         // Decode the sticker BEFORE committing the swap, so the card never
@@ -404,6 +414,15 @@ export default function Stage({ frameRef, streamSettled = false, onComplete, onS
           if (c) next[id] = { ...c, badgeSrc: url, isRare, isSticker, name, collection }
           return next
         })
+        // If the card was already on the shelf, swap its stored badge too so the
+        // shelf + the album-close fly (both read `filled`) show the sticker.
+        if (wasStored) {
+          setFilled((prev) => {
+            const next = prev.slice()
+            next[id] = url
+            return next
+          })
+        }
         setReadySlots((s) => {
           const next = new Set(s)
           next.add(id)
