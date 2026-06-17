@@ -448,7 +448,7 @@ export default function ResultHero({
               <div className="draw-result-ticket-header">
                 <div className="draw-result-ticket-title">POLKADOT PRIZES</div>
                 <div className="draw-result-ticket-meta">
-                  {displayName || 'Your Entry'}
+                  {displayName || 'Your entry'}
                 </div>
               </div>
               <div className="draw-result-ticket-code">

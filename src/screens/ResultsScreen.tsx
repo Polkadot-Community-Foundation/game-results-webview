@@ -246,7 +246,7 @@ export default function ResultsScreen({ outcome, displayName, collectedCount, on
             payoff. (Also surfaces to the rare existing-member-who-failed
             case; the outcome contract can't currently distinguish them.) */}
         {isHaul && (
-          <div className="results-haul-nudge">Keep playing to get your Membership!</div>
+          <div className="results-haul-nudge">Keep playing to get your membership!</div>
         )}
       </div>
 

@@ -139,7 +139,7 @@ export default function SealedStage({
       <div className="draw-pattern-bg" aria-hidden="true" />
 
       <div className="draw-sealed-header">
-        <div className="draw-sealed-eyebrow">Weekly Member Draw</div>
+        <div className="draw-sealed-eyebrow">Weekly member draw</div>
         <div className="draw-sealed-sub">
           {winnerCount} winners drawn
           {' '}<InfoTip title={CONCEPTS.prizeDraw.title} body={CONCEPTS.prizeDraw.body} label="How does the prize draw work?" />
@@ -157,7 +157,7 @@ export default function SealedStage({
           <div className="draw-sealed-ticket-stamp">
             <div className="draw-sealed-ticket-header">
               <div className="draw-sealed-ticket-title">POLKADOT PRIZES</div>
-              <div className="draw-sealed-ticket-meta">Your Entry</div>
+              <div className="draw-sealed-ticket-meta">Your entry</div>
             </div>
             <div className="draw-sealed-ticket-code">
               {formatTicketLong(userTicket)}

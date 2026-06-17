@@ -669,6 +669,20 @@ button:disabled { cursor: default; }
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+/* Sticker badge — the 14 special Web3-Summit items. A bright Polkadot-pink
+   pill above the collection eyebrow so a sticker reveal reads as special and
+   distinct from the gold rare treatment. */
+.card-name-sticker {
+  align-self: center;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(180deg, #ff4db8, #e6007a);
+  box-shadow: 0 3px 12px rgba(230, 0, 122, 0.5);
+}
 /* Collection eyebrow — the item's collection (first filename token),
    small + dim above the name so the name itself stays the focus. */
 .card-name-collection {
@@ -3967,6 +3981,42 @@ button:disabled { cursor: default; }
   padding: 32px 24px;
   z-index: 5;
 }
+/* Prize-draw winner backdrop: the rainbow burst fills the screen; the headline
+   + sub sit on a dark banner (below) so they read over the bright burst. */
+.done-screen.is-celebrate { background: #05030f; }
+.done-burst-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  pointer-events: none;
+}
+.done-screen.is-celebrate > :not(.done-burst-bg) {
+  position: relative;
+  z-index: 2;
+}
+/* Black semi-transparent banner behind the winner headline + sub. */
+.done-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  /* Full-bleed band: stretch to the content width, then bleed past the
+     screen's 24px side padding to reach both edges. */
+  align-self: stretch;
+  margin-left: -24px;
+  margin-right: -24px;
+  padding: 32px 24px;
+  /* Dark band that fades (soft "blurred") into the burst at the top + bottom
+     edges; solid behind the text. */
+  background: linear-gradient(to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.62) 24%,
+    rgba(0, 0, 0, 0.62) 76%,
+    transparent 100%);
+}
 .done-headline {
   font-family: var(--font-title);
   font-weight: 900;
@@ -4013,9 +4063,11 @@ button:disabled { cursor: default; }
   font-size: 14px;
   letter-spacing: 0.02em;
   color: rgba(230, 226, 250, 0.78);
-  /* Pulled up to sit close under the headline; extra negative offset absorbs
-     the headline's new bottom padding (added to un-clip the descender). */
-  margin-top: -20px;
+  /* Readable over the bright burst backdrop. */
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+  /* Sits just under the headline; the banner's gap handles the spacing (the
+     old negative margin overlapped the headline inside the banner). */
+  margin-top: 0;
 }
 .done-burst {
   position: absolute;
@@ -4581,10 +4633,12 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* Content flows from the top; the bottom CTA (margin-top:auto) pins to the
+     base, like the other screens. */
+  justify-content: flex-start;
   gap: 22px;
   padding: max(74px, calc(env(safe-area-inset-top, 0px) + 22px)) 24px
-           calc(env(safe-area-inset-bottom, 0px) + 32px);
+           calc(env(safe-area-inset-bottom, 0px) + 24px);
   text-align: center;
   color: #fff;
   overflow: hidden;
@@ -4604,14 +4658,46 @@ button:disabled { cursor: default; }
   color: var(--gold, #f6c869); opacity: 0.92;
 }
 .chest-title {
-  /* Matches the designer demo's chest title — 40/48 hero, no margin. */
+  /* Demo hero title, a touch smaller to make room for the bottom CTA. */
   margin: 0;
   font-family: var(--font-title, 'Mulish'), system-ui, sans-serif;
-  font-weight: 900; font-size: 40px; line-height: 48px;
+  font-weight: 900; font-size: 34px; line-height: 40px;
   color: #fff;
 }
 /* Gold first phrase ("Game complete.") — matches the designer demo. */
 .chest-title-accent { color: var(--gold, #f6c869); }
+
+/* Bottom CTA on the chest screen: full-width bar pinned to the base (look from
+   .cta-primary). Spinner + "Securing…" while disabled, then "Claim your
+   prizes" once the chest is ready. */
+.chest-claim-cta {
+  /* Pushed to the bottom by the chest's auto bottom-margin; the tiers sit
+     just above it. */
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+/* Greyed-out disabled state for any primary CTA. */
+.cta-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Little ring spinner for the "Securing…" state. */
+.chest-claim-spinner {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: chestClaimSpin 0.7s linear infinite;
+}
+@keyframes chestClaimSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .chest-claim-spinner { animation: none; }
+}
 .chest-sub {
   margin: 10px 0 0; font: 13px/1.5 var(--font-ui), system-ui, sans-serif;
   color: rgba(225, 222, 255, 0.7);
@@ -4620,6 +4706,11 @@ button:disabled { cursor: default; }
   position: relative; z-index: 2;
   width: min(260px, 64vw); height: min(220px, 54vw);
   border: 0; background: none; padding: 0; cursor: default;
+  /* Auto top + bottom margins center the chest on the screen: the free space
+     splits evenly above and below it, so the title stays at the top while the
+     reward tiers + CTA are pushed to the bottom (tiers just above the CTA). */
+  margin-top: auto;
+  margin-bottom: auto;
   --brim: 0.85; /* resting glow/sparkle strength; GSAP bursts it to 1 on open. */
 }
 .chest[data-openable="true"] { cursor: pointer; }
@@ -4687,6 +4778,9 @@ button:disabled { cursor: default; }
   font-weight: 600;
   font-size: 13px;
   line-height: 1;
+  /* Reserve the row even when empty (the headerless "Collectibles" tier) so
+     both cards' icon rows line up. */
+  min-height: 13px;
   color: rgba(255, 255, 255, 0.7);
 }
 .chest-tier-items {
@@ -4731,6 +4825,39 @@ button:disabled { cursor: default; }
   line-height: 1.2;
   text-align: center;
   color: rgba(255, 255, 255, 0.88);
+}
+
+/* Locked "Members only" tier: grey out the rewards and lay a diagonal
+   "Play to unlock" ribbon across it (top-left → bottom-right). */
+.chest-tier--locked {
+  position: relative;
+  overflow: hidden; /* clip the ribbon ends to the card */
+}
+.chest-tier--locked .chest-tier-head,
+.chest-tier--locked .chest-tier-items {
+  filter: grayscale(1);
+  opacity: 0.4;
+}
+.chest-tier-lock-banner {
+  position: absolute;
+  top: 50%;
+  left: -25%;
+  right: -25%;
+  z-index: 2;
+  transform: translateY(-50%) rotate(32deg);
+  padding: 5px 0;
+  text-align: center;
+  background: rgba(10, 12, 32, 0.92);
+  color: #fff;
+  font-family: var(--font-ui), system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  pointer-events: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -5838,10 +5965,17 @@ body.is-embedded .phone-status-bar {
 .album-cover-art {
   position: absolute;
   inset: 0;
-  container-type: inline-size;
   overflow: hidden;
   border-radius: inherit;
-  background: linear-gradient(180deg, #3d3d3d 0%, #323232 100%);
+  background: #2c2c2c; /* placeholder under the cover art while it loads */
+}
+/* The pre-baked color cover artwork, filling the closed-book face. */
+.album-cover-art-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .album-cover-art-sticker {
   position: absolute;

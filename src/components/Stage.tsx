@@ -34,6 +34,7 @@ export interface CardData {
   badgeSrc: string           // populated once the attestation resolves; '' = unloaded
   hashHex: string            // empty until the attestation push arrives
   isRare: boolean            // hash-derived rarity; drives reveal amplification
+  isSticker: boolean         // hash-derived: one of the 14 special "sticker" items
   name: string               // resolver-derived item name (no collection); '' until resolved
   collection: string         // resolver-derived collection (first filename token); '' if none
 }
@@ -45,6 +46,7 @@ function emptyCard(i: number): CardData {
     badgeSrc: '',
     hashHex: '',
     isRare: false,
+    isSticker: false,
     name: '',
     collection: ''
   }
@@ -269,13 +271,13 @@ export default function Stage({ frameRef, streamSettled = false, onComplete, onS
         return next
       })
       resolveAttestationAsset(payload.hash)
-        .then(({ url, isRare, name, collection }) => {
+        .then(({ url, isRare, isSticker, name, collection }) => {
           if (cancelled) return
           setCards((prev) => {
             const next = prev.slice()
             const c = next[slotIdx]
             if (c) {
-              next[slotIdx] = { ...c, badgeSrc: url, isRare, name, collection }
+              next[slotIdx] = { ...c, badgeSrc: url, isRare, isSticker, name, collection }
             }
             return next
           })
@@ -1172,6 +1174,9 @@ export default function Stage({ frameRef, streamSettled = false, onComplete, onS
               data-visible={nameVisible ? 'true' : 'false'}
               aria-hidden={!nameVisible}
             >
+              {current.isSticker && (
+                <div className="card-name-sticker">★ STICKER</div>
+              )}
               {current.collection && (
                 <div className="card-name-collection">{current.collection}</div>
               )}

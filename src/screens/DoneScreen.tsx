@@ -71,11 +71,18 @@ export default function DoneScreen({ nextGameHint, won }: DoneScreenProps) {
 
   return (
     <div className={`done-screen${won ? ' is-celebrate' : ''}`} ref={rootRef}>
+      {/* Prize-draw winners get the rainbow burst as a full-screen backdrop. */}
+      {won && <img className="done-burst-bg" src="./assets/prize-burst.webp" alt="" aria-hidden="true" />}
       {won && <div className="done-burst" ref={burstRef} aria-hidden="true" />}
-      <h1 className="done-headline" ref={headlineRef}>
-        {won ? 'Congratulations!' : <>See you<br />next time.</>}
-      </h1>
-      {won && <div className="done-sub">See you next week.</div>}
+      {won ? (
+        // Headline + sub on a dark banner so they read over the bright burst.
+        <div className="done-banner">
+          <h1 className="done-headline" ref={headlineRef}>Congratulations!</h1>
+          <div className="done-sub">See you next week.</div>
+        </div>
+      ) : (
+        <h1 className="done-headline" ref={headlineRef}>See you<br />next time.</h1>
+      )}
       {!won && nextGameHint && <div className="done-hint">{nextGameHint}</div>}
       <button type="button" className="done-cta cta-primary" onClick={handleDone}>
         Done
