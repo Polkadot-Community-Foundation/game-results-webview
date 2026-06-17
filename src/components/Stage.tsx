@@ -13,7 +13,7 @@ import ActionLabel, { type ActionMode } from './ActionButton'
 import CollectAllButton from './CollectAllButton'
 import ParticleCanvas, { type ParticleCanvasApi } from './ParticleCanvas'
 import { subscribeAttestations } from '../bridge/attestations'
-import { resolveAttestationAsset } from '../attestations/resolver'
+import { resolveAttestationAsset, CATALOGUE_HAS_STICKERS } from '../attestations/resolver'
 import { revealSpawn, revealBurst, revealChargeCancel } from '../reveal3d/revealTimeline'
 import { cardStore } from '../anim/cardStore'
 import type { ShelfFlyItem } from '../anim/shelfFly'
@@ -186,6 +186,9 @@ export default function Stage({ frameRef, streamSettled = false, onComplete, onS
   // so App.tsx can include it in the flow.error event fired on entering
   // 'done'. Replaces the previous per-card console.warn spam.
   const failureCountRef = useRef<number>(0)
+  // Per-game sticker guarantee: flips true once we've decided this game's
+  // sticker (organic or promoted), so the settle-time promotion runs once.
+  const stickerSettledRef = useRef(false)
   // Stuck-screen affordance: when readySlots stays at zero for too long
   // (typically because IPFS is down), we surface a manual Continue
   // overlay so the user isn't trapped staring at blank silhouettes.
@@ -360,6 +363,55 @@ export default function Stage({ frameRef, streamSettled = false, onComplete, onS
       setSeqPhase('done')
     }
   }, [seqPhase, streamSettled, filled, readySlots])
+
+  // ── Per-game sticker guarantee ───────────────────────────────────────────
+  // We can't change how attestation hashes are minted, so we deliver the "every
+  // game grants a sticker" promise at presentation time. Once the stream has
+  // settled (the full game batch is known) and the user is resting on the shelf
+  // (so we never mutate a card mid-reveal), if NO card resolved to a sticker
+  // organically we promote one: the lexicographically-smallest-hash card that
+  // hasn't been stored yet, re-resolved into the sticker pool. The choice is a
+  // pure function of the batch's hashes, so the Pocket (which groups owned NFTs
+  // by mint batch and applies the same rule) promotes the same hash. A small
+  // number of games already have an organic sticker AND get nothing extra here;
+  // a smaller number end up with a bonus sticker — both are fine.
+  useEffect(() => {
+    if (!CATALOGUE_HAS_STICKERS) return
+    if (stickerSettledRef.current) return
+    if (!streamSettled || seqPhase !== 'browsing') return
+    const cs = cardsRef.current
+    // Guarantee already met by an organic sticker anywhere in the batch.
+    if (cs.some((c) => c.hashHex && c.isSticker)) { stickerSettledRef.current = true; return }
+    const fl = filledRef.current
+    // Promote among cards that have arrived but aren't stored/seen yet.
+    const eligible = cs.filter((c) => c.hashHex && !fl[c.id])
+    if (eligible.length === 0) return
+    const norm = (h: string) =>
+      (h.startsWith('0x') || h.startsWith('0X') ? h.slice(2) : h).toLowerCase()
+    let target = eligible[0]!
+    for (const c of eligible) if (norm(c.hashHex) < norm(target.hashHex)) target = c
+    stickerSettledRef.current = true
+    const id = target.id
+    resolveAttestationAsset(target.hashHex, true)
+      .then(async ({ url, isRare, isSticker, name, collection }) => {
+        // Decode the sticker BEFORE committing the swap, so the card never
+        // lingers on its pre-promotion ("other") art while the new image
+        // loads — the badge is sticker-ready the instant badgeSrc changes.
+        try { const im = new Image(); im.src = url; await im.decode() } catch { /* best-effort */ }
+        setCards((prev) => {
+          const next = prev.slice()
+          const c = next[id]
+          if (c) next[id] = { ...c, badgeSrc: url, isRare, isSticker, name, collection }
+          return next
+        })
+        setReadySlots((s) => {
+          const next = new Set(s)
+          next.add(id)
+          return next
+        })
+      })
+      .catch(() => { /* promotion best-effort; organic resolution still stands */ })
+  }, [streamSettled, seqPhase])
 
   // ── Reveal completion fail-safe ──────────────────────────────────────────
   // Every reveal here is a MANUAL silhouette tap (onSilhouetteClick); nothing
