@@ -68,9 +68,9 @@ export interface MemberState {
 
 export interface PrizeDraw {
   /** Prize amount in **whole units** — NOT dollars, NOT micro-units.
-   *  Typical values: 200 (normal weekly draw), 2000 (monthly bonus draw).
+   *  Typical values: 200 (normal draw), 2000 (bonus draw).
    *  Displayed as `"<value> CASH"` (e.g. "200 CASH"). The webview derives
-   *  "this is the bonus week" purely from this number — no separate
+   *  "this is a bonus draw" purely from this number — no separate
    *  cadence flag.
    *
    *  Field name is a legacy artifact from when the design was
@@ -104,9 +104,9 @@ export interface PrizeDraw {
    *  ticket-distance pool; when absent the simulation falls back to a
    *  default pool size. */
   totalEntries?: number
-  /** ISO 8601 timestamp of the next weekly draw. Drives the countdown
-   *  on the result stage. Native owns the schedule — the webview never
-   *  computes draw cadence. */
+  /** ISO 8601 timestamp of the next draw. Drives the countdown on the
+   *  result stage. Native owns the schedule — the webview never computes
+   *  draw cadence. */
   nextDrawAt: string
   /** Native-authoritative outcome. Renderer plays the ceremony but
    *  never decides the result. (Historically equivalent to
