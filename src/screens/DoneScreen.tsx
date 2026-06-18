@@ -78,7 +78,7 @@ export default function DoneScreen({ nextGameHint, won }: DoneScreenProps) {
         // Headline + sub on a dark banner so they read over the bright burst.
         <div className="done-banner">
           <h1 className="done-headline" ref={headlineRef}>Congratulations!</h1>
-          <div className="done-sub">See you next week.</div>
+          <div className="done-sub">See you next time.</div>
         </div>
       ) : (
         <h1 className="done-headline" ref={headlineRef}>See you<br />next time.</h1>

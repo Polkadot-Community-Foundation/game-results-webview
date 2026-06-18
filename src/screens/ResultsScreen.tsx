@@ -144,7 +144,7 @@ export default function ResultsScreen({ outcome, displayName, collectedCount, on
   //   - for players heading into the prize draw, INTRODUCES it (so the draw
   //     isn't a surprise), and
   //   - for failed players, a forward nudge — NEVER a "you lost" framing.
-  //     "Not your week" / loss language is reserved for the prize-draw result
+  //     "Not this time" / loss language is reserved for the prize-draw result
   //     (ResultHero "no win this time"), which only people who actually saw
   //     the draw reach.
   const passed = outcome.passed
@@ -160,7 +160,7 @@ export default function ResultsScreen({ outcome, displayName, collectedCount, on
       ? `Welcome, ${displayName ?? 'member'}.`
       : `Nice run.`
     summarySub = goingToDraw
-      ? `You collected ${haul}, and you've earned a spot in this week's prize draw.`
+      ? `You collected ${haul}, and you've earned a spot in the prize draw.`
       : `You collected ${haul}.`
   } else if (collectedCount > 0) {
     // Failed the game but earned collectibles — celebrate the haul, no loss
@@ -179,25 +179,18 @@ export default function ResultsScreen({ outcome, displayName, collectedCount, on
       className={`results-screen ${isCelebration ? 'is-celebration' : ''}`}
       ref={rootRef}
     >
+      {/* Decorative burst backdrops live OUTSIDE the scroll layer so their
+          deliberate over-size never creates phantom scroll. */}
       {isCelebration && (
-        <>
-          <img
-            className="results-celebration-bg"
-            ref={celebrationBgRef}
-            src="./assets/burst-rainbow.webp"
-            alt=""
-            aria-hidden="true"
-            draggable={false}
-          />
-          <h1
-            className="results-celebration-headline"
-            ref={celebrationHeadlineRef}
-          >
-            Membership<br />unlocked.
-          </h1>
-        </>
+        <img
+          className="results-celebration-bg"
+          ref={celebrationBgRef}
+          src="./assets/burst-rainbow.webp"
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+        />
       )}
-
       {/* Dimmed, desaturated echo of the membership burst — the same asset as
           the celebration, muted via CSS filter + low opacity (see
           .results-haul-bg). Sits behind the (cardless) haul summary. */}
@@ -212,54 +205,65 @@ export default function ResultsScreen({ outcome, displayName, collectedCount, on
         />
       )}
 
-      {!isCelebration && (
-        <header className="results-eyebrow">YOUR RESULTS</header>
-      )}
-
-      <div className="results-card-wrap">
-        {/* Membership card only for passers — a failed player isn't a
-            member, so the verdict for them is copy-only. */}
-        {passed && (
-          <MemberCard
-            {...(displayName ? { displayName } : {})}
-            promoted={outcome.justBecameMember}
-          />
-        )}
+      <div className="results-scroll">
         {isCelebration && (
-          <div
-            className="results-celebration-burst"
-            ref={burstRef}
-            aria-hidden="true"
-          />
+          <h1
+            className="results-celebration-headline"
+            ref={celebrationHeadlineRef}
+          >
+            Membership<br />unlocked.
+          </h1>
         )}
-      </div>
 
-      <div className="results-summary" ref={summaryRef}>
-        <div className="results-summary-headline">{summaryHeadline}</div>
-        <div className="results-summary-sub">
-          {summarySub}
-          {outcome.justBecameMember && (
-            <>{' '}<InfoTip title={CONCEPTS.membership.title} body={CONCEPTS.membership.body} label="What is membership?" /></>
+        {!isCelebration && (
+          <header className="results-eyebrow">YOUR RESULTS</header>
+        )}
+
+        <div className="results-card-wrap">
+          {/* Membership card only for passers — a failed player isn't a
+              member, so the verdict for them is copy-only. */}
+          {passed && (
+            <MemberCard
+              {...(displayName ? { displayName } : {})}
+              promoted={outcome.justBecameMember}
+            />
+          )}
+          {isCelebration && (
+            <div
+              className="results-celebration-burst"
+              ref={burstRef}
+              aria-hidden="true"
+            />
           )}
         </div>
-        {/* Forward nudge on the haul screen — points toward the membership
-            payoff. (Also surfaces to the rare existing-member-who-failed
-            case; the outcome contract can't currently distinguish them.) */}
-        {isHaul && (
-          <div className="results-haul-nudge">Keep playing to get your membership!</div>
-        )}
-      </div>
 
-      <button
-        type="button"
-        className="results-continue cta-primary"
-        ref={ctaRef}
-        onClick={onContinue}
-        disabled={!ctaReady}
-        data-ready={ctaReady ? 'true' : 'false'}
-      >
-        Continue
-      </button>
+        <div className="results-summary" ref={summaryRef}>
+          <div className="results-summary-headline">{summaryHeadline}</div>
+          <div className="results-summary-sub">
+            {summarySub}
+            {outcome.justBecameMember && (
+              <>{' '}<InfoTip title={CONCEPTS.membership.title} body={CONCEPTS.membership.body} label="What is membership?" /></>
+            )}
+          </div>
+          {/* Forward nudge on the haul screen — points toward the membership
+              payoff. (Also surfaces to the rare existing-member-who-failed
+              case; the outcome contract can't currently distinguish them.) */}
+          {isHaul && (
+            <div className="results-haul-nudge">Keep playing to get your membership!</div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          className="results-continue cta-primary"
+          ref={ctaRef}
+          onClick={onContinue}
+          disabled={!ctaReady}
+          data-ready={ctaReady ? 'true' : 'false'}
+        >
+          Continue
+        </button>
+      </div>
     </div>
   )
 }

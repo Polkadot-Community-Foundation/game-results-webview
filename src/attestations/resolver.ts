@@ -126,6 +126,10 @@ function buildPoolKeys(): { normal: string[]; rare: string[]; sticker: string[] 
 
 const { normal: NORMAL_KEYS, rare: RARE_KEYS, sticker: STICKER_KEYS } = buildPoolKeys()
 
+/** Whether the bundled catalogue contains any sticker items — lets the reveal
+ *  skip the per-game sticker-guarantee work when there are none. */
+export const CATALOGUE_HAS_STICKERS = STICKER_KEYS.length > 0
+
 interface MaterializedEntry {
   url: string
   filename: string
@@ -195,8 +199,14 @@ function uint16At(hex: string, byteOffset: number): number {
  *
  *  On malformed input, falls back to the first available entry and
  *  logs a warning. Stage.tsx separately tracks IMAGE-LOAD failures via
- *  __ASSET_FAILURES__; this function only handles HASH-PARSE failures. */
-export function resolveAttestationAsset(hashHex: string): Promise<ResolvedAttestation> {
+ *  __ASSET_FAILURES__; this function only handles HASH-PARSE failures.
+ *
+ *  `forceSticker` overrides the rarity roll and resolves the hash into the
+ *  sticker pool (the hash's index bytes still pick WHICH sticker). It backs
+ *  the per-game sticker guarantee — see the settle-time promotion in
+ *  Stage.tsx — and mirrors collectibles-webview's resolveCollectible so the
+ *  reveal and the Pocket agree on the same promoted hash. */
+export function resolveAttestationAsset(hashHex: string, forceSticker = false): Promise<ResolvedAttestation> {
   const cleaned = (hashHex || '').trim()
   const hex = cleaned.startsWith('0x') || cleaned.startsWith('0X')
     ? cleaned.slice(2)
@@ -204,6 +214,9 @@ export function resolveAttestationAsset(hashHex: string): Promise<ResolvedAttest
 
   // Validate: exactly 64 hex chars (32 bytes).
   if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+    if (forceSticker && STICKER_KEYS.length > 0) {
+      return Promise.resolve({ ...materialize(STICKER_KEYS[0]!), isRare: false, isSticker: true })
+    }
     // Fall back to the first available entry. This shouldn't happen in
     // production (native always sends valid 32-byte hashes), but we
     // don't want one malformed hash to nuke the whole shelf.
@@ -222,12 +235,16 @@ export function resolveAttestationAsset(hashHex: string): Promise<ResolvedAttest
   const pickVal = uint16At(hex, 2)
 
   // Bands checked low→high: sticker, then rare, then normal (see the
-  // STICKER_THRESHOLD / RARE_THRESHOLD comment). An empty pool is skipped so
-  // its band falls through to the next tier. MUST match collectibles-webview.
+  // STICKER_THRESHOLD / RARE_THRESHOLD comment). `forceSticker` short-circuits
+  // to the sticker pool. An empty pool is skipped so its band falls through to
+  // the next tier. MUST match collectibles-webview.
   let pool: string[]
   let isSticker = false
   let isRare = false
-  if (STICKER_KEYS.length > 0 && rarityVal < STICKER_THRESHOLD) {
+  if (forceSticker && STICKER_KEYS.length > 0) {
+    pool = STICKER_KEYS
+    isSticker = true
+  } else if (STICKER_KEYS.length > 0 && rarityVal < STICKER_THRESHOLD) {
     pool = STICKER_KEYS
     isSticker = true
   } else if (RARE_KEYS.length > 0 && rarityVal < STICKER_THRESHOLD + RARE_THRESHOLD) {
@@ -243,4 +260,18 @@ export function resolveAttestationAsset(hashHex: string): Promise<ResolvedAttest
 
   const entry = materialize(pool[pickVal % pool.length]!)
   return Promise.resolve({ ...entry, isRare, isSticker })
+}
+
+/** Synchronous URL of the sticker a hash resolves to WHEN forced into the
+ *  sticker pool (the hash's index bytes still pick which sticker). Returns ''
+ *  when the catalogue has no stickers. Mirrors the `forceSticker` branch of
+ *  resolveAttestationAsset so the album-pages source (App.tsx) and the reveal
+ *  agree on the exact promoted image — no flash to the "other" art on the
+ *  shelf→book fly. */
+export function stickerUrlFor(hashHex: string): string {
+  if (STICKER_KEYS.length === 0) return ''
+  const cleaned = (hashHex || '').trim()
+  const hex = cleaned.startsWith('0x') || cleaned.startsWith('0X') ? cleaned.slice(2) : cleaned
+  const pickVal = /^[0-9a-fA-F]{64}$/.test(hex) ? uint16At(hex, 2) : 0
+  return materialize(STICKER_KEYS[pickVal % STICKER_KEYS.length]!).url
 }

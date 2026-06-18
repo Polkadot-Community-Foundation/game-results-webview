@@ -2478,7 +2478,7 @@ button:disabled { cursor: default; }
 /* ============================================================================
    LOTTO DRAW
    ----------------------------------------------------------------------------
-   Number-reveal mechanic for $200 weekly / $2000 monthly draws. Lives as
+   Number-reveal mechanic for $200 normal / $2000 bonus draws. Lives as
    its own screen alongside Stage; selected via App-level state.
 
    Compositor-only rules: tumbler strips translate, glow opacity-fades,
@@ -3039,19 +3039,31 @@ button:disabled { cursor: default; }
 
 /* ---------- Results screen ---------- */
 .results-screen {
-  position: absolute; inset: 0; z-index: 60; /* verdict overlay above the shelf */
-  /* Bottom inset so the stacked content's Continue can't slide under the
-     home indicator on a tall celebration + short screen (matches the chest /
-     draw screens, which already pad for it). */
-  padding: 76px 22px calc(env(safe-area-inset-bottom, 0px) + 28px);
+  position: absolute; inset: 0;
+  z-index: 5;
+  overflow: hidden;
+}
+/* Foreground scroll layer. The decorative burst backdrops stay OUTSIDE this
+   (as siblings of .results-scroll) so their deliberate over-size can never
+   create phantom scroll; only the real content scrolls, and only when it
+   can't fit — keeping the Continue button reachable on short screens. */
+.results-scroll {
+  position: absolute; inset: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 24px;
-  z-index: 5;
-  overflow: hidden;
+  /* Bottom inset so the stacked content's Continue can't slide under the
+     home indicator on a tall celebration + short screen (matches the chest /
+     draw screens, which already pad for it). */
+  padding: 76px 22px calc(env(safe-area-inset-bottom, 0px) + 28px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
-.results-screen.is-celebration {
+.results-screen.is-celebration .results-scroll {
   /* Celebration variant tightens the top padding so the big headline
      sits closer to the status bar, leaving room for the card + summary
      below without crowding. */
@@ -3182,6 +3194,11 @@ button:disabled { cursor: default; }
    center. */
 .is-celebration .results-card-wrap {
   position: relative;
+  /* The big "Membership unlocked." headline already spaces the card from the
+     top, so the celebration doesn't need the standard variant's large top
+     margin — that extra push made the screen overflow and hide the Continue
+     button on short phones. */
+  margin-top: clamp(12px, 3vh, 32px);
 }
 
 .results-eyebrow {
@@ -3249,6 +3266,20 @@ button:disabled { cursor: default; }
   cursor: default;
 }
 .results-continue:active { transform: scale(0.96); }
+
+/* Short viewports: tighten the celebration ("Membership unlocked.") stack so
+   the Continue button stays visible without scrolling. The .results-scroll
+   layer still scrolls as a safety net on anything shorter than this. */
+@media (max-height: 760px) {
+  .results-scroll { gap: 16px; }
+  .results-screen.is-celebration .results-scroll { padding-top: 40px; }
+  .results-celebration-headline {
+    font-size: clamp(26px, 8vmin, 36px);
+    margin-top: clamp(8px, 2vh, 16px);
+  }
+  .is-celebration .results-card-wrap { margin-top: clamp(6px, 1.5vh, 16px); }
+  .results-summary { margin-top: 10px; }
+}
 
 /* ---------- Member card ---------- */
 .member-card {
@@ -3698,13 +3729,17 @@ button:disabled { cursor: default; }
    burst can fly outward without page scroll. */
 .username-screen {
   position: absolute; inset: 0;
-  padding: 78px 22px 28px;
+  padding: 78px 22px calc(env(safe-area-inset-bottom, 0px) + 28px);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0;
   z-index: 5;
-  overflow: hidden;
+  /* Scroll if content can't fit so the bottom "Next" CTA is always reachable. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Subtle drifting backdrop — reuses lottaballz's pattern.png so the
@@ -3976,11 +4011,20 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 28px;
-  padding: 32px 24px;
+  padding: 32px 24px calc(env(safe-area-inset-bottom, 0px) + 24px);
   z-index: 5;
+  /* Scroll-safe: content stays vertically centered when it fits (via the
+     flex spacers below) but scrolls from the top when it can't, so the Done
+     button is always reachable on short screens. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
+.done-screen::before,
+.done-screen::after { content: ""; flex: 1 1 0; min-height: 0; }
 /* Prize-draw winner backdrop: the rainbow burst fills the screen; the headline
    + sub sit on a dark banner (below) so they read over the bright burst. */
 .done-screen.is-celebrate { background: #05030f; }
@@ -4097,12 +4141,18 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 20px;
-  padding: 32px 28px;
+  padding: 32px 28px calc(env(safe-area-inset-bottom, 0px) + 28px);
   text-align: center;
   z-index: 5;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
+.handoff-screen::before,
+.handoff-screen::after { content: ""; flex: 1 1 0; min-height: 0; }
 .handoff-mark {
   font-size: 40px;
   color: var(--pink);
@@ -4139,12 +4189,18 @@ button:disabled { cursor: default; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 20px;
-  padding: 32px 28px;
+  padding: 32px 28px calc(env(safe-area-inset-bottom, 0px) + 28px);
   text-align: center;
   z-index: 5;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
+.noattest-screen::before,
+.noattest-screen::after { content: ""; flex: 1 1 0; min-height: 0; }
 .noattest-mark {
   font-size: 40px;
   color: rgba(200, 196, 230, 0.45);
@@ -4468,7 +4524,7 @@ button:disabled { cursor: default; }
 
 /* New-member consolation — only on prize-draw loss with justBecameMember.
    Sits above the Continue CTA (around bottom: 84px so it clears the
-   button) so the "membership unlocked, better luck next week" beat is
+   button) so the "membership unlocked, better luck next time" beat is
    visible alongside the action. Quiet styling: small, low-contrast, no
    competing for attention with the ticket. Fades in via the data-ready
    gate so it appears in sync with the CTA. */
@@ -4511,7 +4567,7 @@ button:disabled { cursor: default; }
 .draw-consolation-eyebrow[data-ready="true"] { opacity: 1; }
 
 .draw-consolation-body {
-  /* "Better luck on the draw next week." — quieter aside, sits below
+  /* "Better luck on the draw next time." — quieter aside, sits below
      the loss ticket and is nudged down a bit from the visual centerline
      to give the membership-unlocked moment above the ticket more
      emotional weight. */
@@ -4641,7 +4697,12 @@ button:disabled { cursor: default; }
            calc(env(safe-area-inset-bottom, 0px) + 24px);
   text-align: center;
   color: #fff;
-  overflow: hidden;
+  /* Scroll the whole screen if its content can't fit (small phones) so the
+     bottom CTA is always reachable — never clipped by the frame. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: radial-gradient(ellipse 90% 70% at 50% 42%,
     #5e48bc 0%, #3d43ae 55%, #1f1450 100%);
 }
@@ -4931,6 +4992,11 @@ button:disabled { cursor: default; }
   align-items: center;
   justify-content: flex-start;
   text-align: center;
+  /* Scroll if the ticket + REVEAL can't fit so the CTA is never clipped. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .draw-sealed-header { z-index: 3; }
 .draw-sealed-eyebrow {
