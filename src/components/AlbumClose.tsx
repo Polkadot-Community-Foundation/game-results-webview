@@ -59,9 +59,7 @@ export default function AlbumClose({ srcs, fromRects = [], onDone }: AlbumCloseP
   const items = srcs.filter(Boolean)
   // Each cell uses the src of the badge that actually flies into it (the
   // captured shelf rect), falling back to the resolved src when there's no
-  // capture. This guarantees a cell shows the SAME image as its flyer — a
-  // promoted sticker lands on a sticker cell, never flashing to its
-  // pre-promotion "other" art.
+  // capture. This guarantees a cell shows the SAME image as its flyer.
   const cellSrcs = items.map((s, i) => fromRects[i]?.src ?? s)
   // Split evenly across the two facing pages (left = inside front cover,
   // right = collection page) so they read as a real album spread.
