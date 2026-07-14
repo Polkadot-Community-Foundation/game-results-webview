@@ -1,4 +1,4 @@
-name: Deploy to Polkadot
+name: Deploy to devnet
 
 on:
   push:
@@ -42,8 +42,7 @@ jobs:
 
       - name: Assert bundle is Paseo-free
         run: |
-          if grep -rIil 'paseo' dist; then echo "::error::Paseo reference in built bundle"; exit 1; fi
-          echo "OK: no Paseo in bundle"
+          echo "devnet targets public Paseo — Summit/paseo bundle assert intentionally disabled"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -69,7 +68,7 @@ jobs:
   # publish: false — Summit's DotNS deployment has no Publisher registry.
   deploy-production:
     needs: build
-    name: Deploy Production (Summit)
+    name: Deploy Production (devnet)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     uses: Polkadot-Community-Foundation/polkadot-app-deploy/.github/workflows/deploy.yml@v0.12.0
     with:
