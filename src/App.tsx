@@ -15,7 +15,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { readInitialInput, subscribeInput } from './bridge/input'
 import { subscribeAvailability } from './bridge/availability'
 import { resetAttestations, subscribeAttestations, onShelfAttestationCount } from './bridge/attestations'
-import { resolveAttestationAsset, stickerUrlFor, CATALOGUE_HAS_STICKERS } from './attestations/resolver'
+import { resolveAttestationAsset } from './attestations/resolver'
 import { SHELF_SIZE } from './components/Stage'
 import { subscribeOutcome, readBufferedOutcome, resetOutcome } from './bridge/outcome'
 import { sendFlowEvent } from './bridge/send'
@@ -163,7 +163,7 @@ export default function App() {
   // Accumulator state behind collectibleSrcs, held in refs (not effect-local)
   // so a fresh dev session can clear it — see startMockSession. byIndex maps a
   // slot index → resolved URL; seen dedupes native re-pushes by hash.
-  const collectibleByIndex = useRef<Map<number, { hash: string; url: string; isSticker: boolean }>>(new Map())
+  const collectibleByIndex = useRef<Map<number, string>>(new Map())
   const collectibleSeen = useRef<Set<string>>(new Set())
   // Shelf badge rects captured at reveal-end (by Stage) so the album-close can
   // fly those exact assets from the shelf into the book pages. Latest snapshot
@@ -385,41 +385,21 @@ export default function App() {
   // just showed. subscribeAttestations replays buffered pushes on subscribe, so
   // mounting once here rebuilds the set from whatever has already arrived, then
   // tracks new arrivals. Deduped by hash so native re-pushes don't re-resolve.
-  //
-  // The per-game sticker guarantee is applied here too, with the SAME rule the
-  // reveal uses (Stage.tsx): if no collectible rolled a sticker organically,
-  // the lexicographically-smallest-hash one is promoted to its sticker image.
-  // This keeps the album pages identical to the promoted shelf badges that fly
-  // into them — without it, a promoted badge would fly in as a sticker and land
-  // on its pre-promotion "other" art.
   useEffect(() => {
     const byIndex = collectibleByIndex.current
     const seen = collectibleSeen.current
     let cancelled = false
-    const norm = (h: string) =>
-      (h.startsWith('0x') || h.startsWith('0X') ? h.slice(2) : h).toLowerCase()
     const recompute = () => {
       const entries = [...byIndex.entries()].sort((a, b) => a[0] - b[0])
-      // Promote the smallest-hash collectible unless one is already a sticker.
-      let promoteIdx = -1
-      if (CATALOGUE_HAS_STICKERS && !entries.some(([, v]) => v.isSticker)) {
-        let bestHash = ''
-        for (const [idx, v] of entries) {
-          const h = norm(v.hash)
-          if (promoteIdx === -1 || h < bestHash) { promoteIdx = idx; bestHash = h }
-        }
-      }
-      setCollectibleSrcs(
-        entries.map(([idx, v]) => (idx === promoteIdx ? stickerUrlFor(v.hash) || v.url : v.url))
-      )
+      setCollectibleSrcs(entries.map(([, url]) => url))
     }
     const off = subscribeAttestations((payload) => {
       if (seen.has(payload.hash)) return
       seen.add(payload.hash)
       resolveAttestationAsset(payload.hash)
-        .then(({ url, isSticker }) => {
+        .then(({ url }) => {
           if (cancelled) return
-          byIndex.set(payload.index, { hash: payload.hash, url, isSticker })
+          byIndex.set(payload.index, url)
           recompute()
         })
         .catch(() => { /* best-effort; the reveal handles its own asset errors */ })

@@ -36,21 +36,17 @@ import cidMap from './cid_map.json'
 /** Web3 Summit IPFS gateway. Serves catalogue images at `/ipfs/<cid>`. */
 const IPFS_GATEWAY = 'https://summit-ipfs.polkadot.io/ipfs'
 
-// Rarity-roll bands over the uint16 space (0..65535), read from bytes 0-1 and
-// checked low→high:
-//   [0, STICKER_THRESHOLD)                              → sticker pool
-//   [STICKER_THRESHOLD, STICKER_THRESHOLD+RARE_BAND)    → rare pool
-//   else                                                 → normal pool
-// The "stickers" are the 14 Web3-Summit ("w3s") promo items — a special tier
-// of their own. The per-GAME guarantee ("always 1 sticker") is delivered by
-// the minting layer crafting one attestation hash per game whose rarity bytes
-// fall in [0, STICKER_THRESHOLD); this resolver only maps that band to the
-// sticker pool deterministically. These constants + the pool partition MUST
-// stay identical to collectibles-webview's resolver, or the reveal and the
-// Pocket would resolve the same on-chain hash to different images.
+// Rarity roll over the uint16 space (0..65535), read from bytes 0-1:
+//   [0, RARE_THRESHOLD) → rare pool
+//   else                → normal pool
+// This constant + the pool partition MUST stay identical to
+// collectibles-webview's resolver, or the reveal and the Pocket would resolve
+// the same on-chain hash to different images.
+//
+// Event-exclusive tiers (like the retired Web3-Summit "sticker" items) slot in
+// as an extra band carved out below the rare band — read
+// docs/event-exclusive-collectibles.md before adding one.
 
-/** Sticker band width. ≈ 1311/65536 ≈ 2% organic sticker chance. */
-const STICKER_THRESHOLD = 1311
 /** Rare band width. 6554/65536 ≈ 10%. Matches RARE_THRESHOLD in
  *  CollectableHashResolver/resolver.py. */
 const RARE_THRESHOLD = 6554
@@ -72,8 +68,8 @@ function titleCase(fragment: string): string {
  *    "INDEX--Category--name--tag--HEX.webp"
  *  Surfacing collection + name separately keeps the collection out of every
  *  item name — it's shown as its own eyebrow instead.
- *    "00001--Stickers--agentic_human--w3s--8F5E4F.webp" → { collection: "Stickers", name: "Agentic Human" }
- *    "00120--Animals--red_panda--Rare--C24A2F.webp"     → { collection: "Animals",  name: "Red Panda" }
+ *    "00115--Animals--Cicada--Common--766957.webp"  → { collection: "Animals", name: "Cicada" }
+ *    "00120--Animals--red_panda--Rare--C24A2F.webp" → { collection: "Animals", name: "Red Panda" }
  *  The leading index, the rarity/tag segment (second-to-last) and the hex
  *  (last) are dropped from the name. A filename that doesn't fit the `--`
  *  shape falls back to treating the whole basename (minus a numeric index) as
@@ -91,43 +87,28 @@ function parseName(filename: string): { collection: string; name: string } {
   return { collection, name: name || collection }
 }
 
-/** True for the 14 special "sticker" items — identified by the catalogue
- *  category segment being "Stickers" (equivalently the "w3s" tag). They get
- *  their own pool, distinct from rare/normal. */
-function isStickerFilename(filename: string): boolean {
-  const base = filename.replace(/\.[a-z0-9]+$/i, '')
-  const parts = base.split('--')
-  return (parts[1] ?? '').toLowerCase() === 'stickers'
-}
-
-/** Classify catalogue keys into sorted sticker/rare/normal pools at load —
+/** Classify catalogue keys into sorted rare/normal pools at load —
  *  cheap (no URL strings, no name regexes, no per-entry objects), skipping
  *  entries whose CID is missing/empty so pool sizes match exactly. The
  *  mapping needs the full ordered, classified catalogue (a hash picks
  *  `pickVal % pool.length` over the sorted pool, so dropping entries
  *  would remap every hash), but the heavy per-entry materialization is
  *  deferred to `materialize()`. */
-function buildPoolKeys(): { normal: string[]; rare: string[]; sticker: string[] } {
+function buildPoolKeys(): { normal: string[]; rare: string[] } {
   const normal: string[] = []
   const rare: string[] = []
-  const sticker: string[] = []
   for (const key of Object.keys(MAP).sort()) {
     const cid = MAP[key]
     if (typeof cid !== 'string' || !cid) continue
     // Filename is the trailing path component; tolerate both / and \.
     const filename = key.replace(/\\/g, '/').split('/').pop() || key
-    if (isStickerFilename(filename)) sticker.push(key)
-    else if (filename.toLowerCase().includes('rare')) rare.push(key)
+    if (filename.toLowerCase().includes('rare')) rare.push(key)
     else normal.push(key)
   }
-  return { normal, rare, sticker }
+  return { normal, rare }
 }
 
-const { normal: NORMAL_KEYS, rare: RARE_KEYS, sticker: STICKER_KEYS } = buildPoolKeys()
-
-/** Whether the bundled catalogue contains any sticker items — lets the reveal
- *  skip the per-game sticker-guarantee work when there are none. */
-export const CATALOGUE_HAS_STICKERS = STICKER_KEYS.length > 0
+const { normal: NORMAL_KEYS, rare: RARE_KEYS } = buildPoolKeys()
 
 interface MaterializedEntry {
   url: string
@@ -173,9 +154,6 @@ export interface ResolvedAttestation {
    *  to drive card-art selection (high-value art vs generic) — see
    *  Stage.tsx. */
   isRare: boolean
-  /** True iff the hash resolved to the special "sticker" pool (the 14
-   *  Web3-Summit items). Drives the sticker label on the revealed card. */
-  isSticker: boolean
 }
 
 /** Parse a uint16 from two consecutive hex chars at the given byte
@@ -198,14 +176,8 @@ function uint16At(hex: string, byteOffset: number): number {
  *
  *  On malformed input, falls back to the first available entry and
  *  logs a warning. Stage.tsx separately tracks IMAGE-LOAD failures via
- *  __ASSET_FAILURES__; this function only handles HASH-PARSE failures.
- *
- *  `forceSticker` overrides the rarity roll and resolves the hash into the
- *  sticker pool (the hash's index bytes still pick WHICH sticker). It backs
- *  the per-game sticker guarantee — see the settle-time promotion in
- *  Stage.tsx — and mirrors collectibles-webview's resolveCollectible so the
- *  reveal and the Pocket agree on the same promoted hash. */
-export function resolveAttestationAsset(hashHex: string, forceSticker = false): Promise<ResolvedAttestation> {
+ *  __ASSET_FAILURES__; this function only handles HASH-PARSE failures. */
+export function resolveAttestationAsset(hashHex: string): Promise<ResolvedAttestation> {
   const cleaned = (hashHex || '').trim()
   const hex = cleaned.startsWith('0x') || cleaned.startsWith('0X')
     ? cleaned.slice(2)
@@ -213,13 +185,10 @@ export function resolveAttestationAsset(hashHex: string, forceSticker = false): 
 
   // Validate: exactly 64 hex chars (32 bytes).
   if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
-    if (forceSticker && STICKER_KEYS.length > 0) {
-      return Promise.resolve({ ...materialize(STICKER_KEYS[0]!), isRare: false, isSticker: true })
-    }
     // Fall back to the first available entry. This shouldn't happen in
     // production (native always sends valid 32-byte hashes), but we
     // don't want one malformed hash to nuke the whole shelf.
-    const fallbackKey = NORMAL_KEYS[0] ?? RARE_KEYS[0] ?? STICKER_KEYS[0]
+    const fallbackKey = NORMAL_KEYS[0] ?? RARE_KEYS[0]
     if (!fallbackKey) {
       return Promise.reject(new Error('cid_map is empty'))
     }
@@ -227,26 +196,17 @@ export function resolveAttestationAsset(hashHex: string, forceSticker = false): 
       `[resolver] hash not 32-byte hex (got ${hex.length} chars), using fallback`,
       hashHex.slice(0, 16)
     )
-    return Promise.resolve({ ...materialize(fallbackKey), isRare: false, isSticker: false })
+    return Promise.resolve({ ...materialize(fallbackKey), isRare: false })
   }
 
   const rarityVal = uint16At(hex, 0)
   const pickVal = uint16At(hex, 2)
 
-  // Bands checked low→high: sticker, then rare, then normal (see the
-  // STICKER_THRESHOLD / RARE_THRESHOLD comment). `forceSticker` short-circuits
-  // to the sticker pool. An empty pool is skipped so its band falls through to
-  // the next tier. MUST match collectibles-webview.
+  // Rare band checked first (see the RARE_THRESHOLD comment). An empty rare
+  // pool falls through to normal. MUST match collectibles-webview.
   let pool: string[]
-  let isSticker = false
   let isRare = false
-  if (forceSticker && STICKER_KEYS.length > 0) {
-    pool = STICKER_KEYS
-    isSticker = true
-  } else if (STICKER_KEYS.length > 0 && rarityVal < STICKER_THRESHOLD) {
-    pool = STICKER_KEYS
-    isSticker = true
-  } else if (RARE_KEYS.length > 0 && rarityVal < STICKER_THRESHOLD + RARE_THRESHOLD) {
+  if (RARE_KEYS.length > 0 && rarityVal < RARE_THRESHOLD) {
     pool = RARE_KEYS
     isRare = true
   } else {
@@ -258,19 +218,5 @@ export function resolveAttestationAsset(hashHex: string, forceSticker = false): 
   }
 
   const entry = materialize(pool[pickVal % pool.length]!)
-  return Promise.resolve({ ...entry, isRare, isSticker })
-}
-
-/** Synchronous URL of the sticker a hash resolves to WHEN forced into the
- *  sticker pool (the hash's index bytes still pick which sticker). Returns ''
- *  when the catalogue has no stickers. Mirrors the `forceSticker` branch of
- *  resolveAttestationAsset so the album-pages source (App.tsx) and the reveal
- *  agree on the exact promoted image — no flash to the "other" art on the
- *  shelf→book fly. */
-export function stickerUrlFor(hashHex: string): string {
-  if (STICKER_KEYS.length === 0) return ''
-  const cleaned = (hashHex || '').trim()
-  const hex = cleaned.startsWith('0x') || cleaned.startsWith('0X') ? cleaned.slice(2) : cleaned
-  const pickVal = /^[0-9a-fA-F]{64}$/.test(hex) ? uint16At(hex, 2) : 0
-  return materialize(STICKER_KEYS[pickVal % STICKER_KEYS.length]!).url
+  return Promise.resolve({ ...entry, isRare })
 }
