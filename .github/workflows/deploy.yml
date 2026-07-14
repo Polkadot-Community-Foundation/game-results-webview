@@ -75,7 +75,7 @@ jobs:
     with:
       artifact-name: game-webview-build
       dotns-domain: game-results-webview.dot
-      env: paseo-next
+      env: devnet
       gateway: dot.li
       direct-signer: true
       publish: false
