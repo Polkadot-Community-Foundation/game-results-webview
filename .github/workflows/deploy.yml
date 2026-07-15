@@ -70,7 +70,7 @@ jobs:
     needs: build
     name: Deploy Production (devnet)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    uses: Polkadot-Community-Foundation/polkadot-app-deploy/.github/workflows/deploy.yml@v0.12.0
+    uses: Polkadot-Community-Foundation/polkadot-app-deploy/.github/workflows/deploy.yml@v0.12.1
     with:
       artifact-name: game-webview-build
       dotns-domain: game-results-webview.dot
@@ -82,6 +82,6 @@ jobs:
       max-retries: 10
       # v0.11.2 reusable installs the PCF-scoped @polkadot-community-foundation
       # package by default; v0.11.0 hardcoded @parity (wrong build for Summit).
-      polkadot-app-deploy-version: "0.12.0"
+      polkadot-app-deploy-version: "0.12.1"
     secrets:
       mnemonic: ${{ secrets.DOTNS_MNEMONIC }}

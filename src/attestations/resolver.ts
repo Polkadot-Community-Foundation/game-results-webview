@@ -35,7 +35,7 @@ import cidMap from './cid_map.json'
 
 /** Summit Bulletin Chain IPFS gateway. Bulletin storage expires
  *  (~2 weeks); when that happens, re-upload via the resolver tool. */
-const IPFS_GATEWAY = 'https://summit-ipfs.polkadot.io/ipfs'
+const IPFS_GATEWAY = 'https://devnet-ipfs.api.polkadotcommunity.foundation/ipfs'
 
 // Rarity roll over the uint16 space (0..65535), read from bytes 0-1:
 //   [0, RARE_THRESHOLD) → rare pool
