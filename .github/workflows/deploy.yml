@@ -51,7 +51,7 @@ jobs:
     needs: build
     name: Deploy Preview
     if: github.event_name == 'pull_request'
-    uses: paritytech/bulletin-deploy/.github/workflows/deploy.yml@main
+    uses: paritytech/polkadot-app-deploy/.github/workflows/deploy.yml@main
     with:
       artifact-name: game-webview-build
       dotns-domain: game-webview-pr${{ github.event.pull_request.number }}-preview00.dot
@@ -60,7 +60,7 @@ jobs:
       gateway: dot.li
       skip-cache: true
       max-retries: 10
-      bulletin-deploy-version: "0.7.30-rc.0"
+      polkadot-app-deploy-version: "0.12.0"
     secrets:
       mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
 
@@ -89,7 +89,7 @@ jobs:
             gateway: dot.li
           - env: paseo-next-v2
             gateway: paseo.li
-    uses: paritytech/bulletin-deploy/.github/workflows/deploy.yml@main
+    uses: paritytech/polkadot-app-deploy/.github/workflows/deploy.yml@main
     with:
       artifact-name: game-webview-build
       dotns-domain: game-webview.dot
@@ -97,6 +97,6 @@ jobs:
       gateway: ${{ matrix.gateway }}
       skip-cache: true
       max-retries: 10
-      bulletin-deploy-version: "0.7.30-rc.0"
+      polkadot-app-deploy-version: "0.12.0"
     secrets:
       mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
