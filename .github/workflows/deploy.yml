@@ -75,7 +75,7 @@ jobs:
       artifact-name: game-webview-build
       dotns-domain: game-results-webview.dot
       env: devnet
-      gateway: dot.li
+      gateway: dev-dot.li
       direct-signer: true
       publish: false
       skip-cache: true
