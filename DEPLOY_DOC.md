@@ -24,9 +24,9 @@ reusable workflow.
 
 ```
 push to main ─┐
-PR opened ────┤→  build (npm ci + npm run build → dist/, uploaded as artifact)
-              │        │
-              │        ▼
+PR opened ────┤→  typecheck ─┬─ build (npm run build → dist/, uploaded as artifact)
+              │              │
+              │              ▼
               │   polkadot-app-deploy reusable workflow:
               │     1. download the build artifact
               │     2. merkleize + upload the files to the Bulletin Chain (→ a CID)
@@ -135,16 +135,18 @@ values. Change:
 - the **`dotns-domain`** values (the name you publish to + the PR-preview pattern),
 - the **`env` / `gateway`** matrix to the network(s) you target — run
   `polkadot-app-deploy --list-environments` for valid ids,
-- `permissions:` — `contents: read` and `pull-requests: write` (the latter so
-  the preview job can post its sticky PR comment),
-- pin **`polkadot-app-deploy-version`** (minimum supported is `0.7.0`).
+- `permissions:` — `contents: read` at the workflow level; the preview job
+  adds `pull-requests: write` so it can post its sticky PR comment,
+- pin **`polkadot-app-deploy-version`** (minimum supported is `0.7.0`) and the
+  reusable-workflow ref (`@v<version>`) to the same release.
 
 ---
 
 ## 4. The reusable-workflow inputs
 
-`deploy.yml` calls `paritytech/polkadot-app-deploy/.github/workflows/deploy.yml@main`.
-Inputs it accepts (the ones this repo sets are marked ✓):
+`deploy.yml` calls `paritytech/polkadot-app-deploy/.github/workflows/deploy.yml@v0.13.1`
+— the ref is pinned to the same release as `polkadot-app-deploy-version`; bump
+both together. Inputs it accepts (the ones this repo sets are marked ✓):
 
 | Input | Type | Default | Purpose |
 |---|---|---|---|
@@ -204,8 +206,7 @@ publishing to that environment.
 
 Forcing `skip-cache: true` makes every leg always deploy. The tradeoff is that
 every push to `main` redeploys every environment even when the build content is
-unchanged; that's intentional, and why the `workflow_dispatch` `skip-cache`
-input no longer affects production. Leave it `true`.
+unchanged; that's intentional. Leave it `true`.
 
 ---
 
