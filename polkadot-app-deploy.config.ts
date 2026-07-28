@@ -24,10 +24,14 @@ export default defineConfig({
   displayName: "Game Results",
   description:
     "A post-game celebration WebView that reveals a player's collectibles, membership, prize-draw result, and new username as one animated sequence.",
-  // NEEDS ICON FROM USER: the repo ships only in-scene .webp art (cards, badges,
-  // chest sprite sheet) — no square app icon. Drop a square PNG/JPEG at this path
-  // before the manifest-publish pass (a re-encoded webp from public/assets is a
-  // candidate); publish fails loudly until it exists. Set `format` to match.
+  // PLACEHOLDER ICON: the repo ships only in-scene .webp art (cards, badges,
+  // chest sprite sheet) and has no square app icon of its own, so this is the
+  // shared devnet build icon — white tile, black Polkadot mark, DEV label — from
+  // the app icon design language. It unblocks manifest publish, which fails
+  // loudly without a readable file here. Replace with bespoke artwork when there
+  // is any; a re-encoded webp from public/assets is still a candidate. If this
+  // product is ever published to mainnet, swap in the unlabelled production
+  // variant — the DEV label would otherwise misreport the network.
   icon: { path: "./assets/icon.png", format: "png" },
   executables: [
     {
