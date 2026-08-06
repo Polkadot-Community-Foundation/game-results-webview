@@ -33,8 +33,8 @@
 
 import cidMap from './cid_map.json'
 
-/** Web3 Summit IPFS gateway. Serves catalogue images at `/ipfs/<cid>`. */
-const IPFS_GATEWAY = 'https://summit-ipfs.polkadot.io/ipfs'
+/** Paseo Bulletin Next IPFS gateway. Serves catalogue images at `/ipfs/<cid>`. */
+const IPFS_GATEWAY = 'https://paseo-bulletin-next-ipfs.polkadot.io/ipfs'
 
 // Rarity roll over the uint16 space (0..65535), read from bytes 0-1:
 //   [0, RARE_THRESHOLD) → rare pool
