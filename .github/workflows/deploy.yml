@@ -1,4 +1,12 @@
-name: Deploy to devnet
+# Builds the webview and deploys it to Polkadot Bulletin storage via the
+# Polkadot-Community-Foundation/polkadot-app-deploy reusable workflow.
+#
+#   pull request  → game-webview-pr<N>-preview00.dot on devnet
+#   push to main  → game-results-webview.dot on devnet
+#
+# The reusable-workflow ref (@v0.16.7) and polkadot-app-deploy-version are
+# pinned to the same release — bump them together.
+name: Deploy to Polkadot
 
 on:
   push:
@@ -8,30 +16,50 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      skip-cache:
-        description: "Skip deployment cache and force redeploy"
-        type: boolean
-        default: false
 
 permissions:
   contents: read
-  pull-requests: write
 
+# One run per PR (or per ref on main). Superseded PR runs are cancelled;
+# production runs queue instead, so an in-flight chain deploy is never
+# killed partway through.
 concurrency:
   group: deploy-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build:
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
-    name: Build
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
@@ -40,48 +68,54 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Assert bundle is Paseo-free
-        run: |
-          echo "devnet targets public Paseo — Summit/paseo bundle assert intentionally disabled"
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v7
         with:
           name: game-webview-build
           path: dist
           retention-days: 1
 
-  # Production (push to main / manual) publishes game-webview.dot to the Summit
-  # network only, via the PCF polkadot-app-deploy reusable workflow. PR previews
-  # are intentionally NOT deployed: each preview label is a fresh DotNS
-  # registration on Summit (storage deposit + ~14d Bulletin expiry + PoP gate),
-  # so previews stay off Summit and `build` above is the PR gate. The previous
-  # previewnet legs (paritytech/bulletin-deploy, env: preview) have been removed
-  # — PCF CI must deploy to Summit only.
-  #
-  # skip-cache: true forces every push to redeploy (the reusable workflow keys
-  # its cache on build-content hash only, so unchanged content would skip).
-  #
-  # direct-signer: true — on Summit the default pool-mode storage accounts come
-  # from a public phrase and are NOT Bulletin-authorized; only the DOTNS_MNEMONIC
-  # account is, so it must sign the storage txs itself.
-  #
-  # publish: false — Summit's DotNS deployment has no Publisher registry.
+  # PR previews deploy to devnet (Paseo system chains) on a throwaway
+  # subdomain per PR, and post the preview URL as a sticky PR comment.
+  deploy-preview:
+    name: Deploy preview
+    needs: [typecheck, build]
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write # sticky PR comment with the preview URL
+    uses: Polkadot-Community-Foundation/polkadot-app-deploy/.github/workflows/deploy.yml@v0.16.7
+    with:
+      artifact-name: game-webview-build
+      dotns-domain: game-webview-pr${{ github.event.pull_request.number }}-preview00.dot
+      comment-on-pr: true
+      env: devnet
+      gateway: dev-dot.li
+      skip-cache: true
+      max-retries: 10
+      # Embedded by the native app; never list it in the browse directory.
+      publish: false
+      polkadot-app-deploy-version: "0.16.7"
+    secrets:
+      mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
+
+  # Production (push to main / manual dispatch) publishes
+  # game-results-webview.dot to devnet. skip-cache: true forces a redeploy
+  # even when the build content is unchanged.
   deploy-production:
-    needs: build
-    name: Deploy Production (devnet)
+    name: Deploy production (devnet)
+    needs: [typecheck, build]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    uses: Polkadot-Community-Foundation/polkadot-app-deploy/.github/workflows/deploy.yml@v0.12.1
+    uses: Polkadot-Community-Foundation/polkadot-app-deploy/.github/workflows/deploy.yml@v0.16.7
     with:
       artifact-name: game-webview-build
       dotns-domain: game-results-webview.dot
       env: devnet
       gateway: dev-dot.li
-      direct-signer: true
-      publish: false
       skip-cache: true
       max-retries: 10
-      # v0.11.2 reusable installs the PCF-scoped @polkadot-community-foundation
-      # package by default; v0.11.0 hardcoded @parity (wrong build for Summit).
-      polkadot-app-deploy-version: "0.12.1"
+      # Embedded by the native app; never list it in the browse directory.
+      publish: false
+      polkadot-app-deploy-version: "0.16.7"
     secrets:
       mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
