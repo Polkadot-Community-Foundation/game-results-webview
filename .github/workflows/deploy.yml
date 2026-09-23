@@ -93,6 +93,8 @@ jobs:
       gateway: dev-dot.li
       skip-cache: true
       max-retries: 10
+      # Embedded by the native app; never list it in the browse directory.
+      publish: false
       polkadot-app-deploy-version: "0.16.7"
     secrets:
       mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
@@ -112,6 +114,8 @@ jobs:
       gateway: dev-dot.li
       skip-cache: true
       max-retries: 10
+      # Embedded by the native app; never list it in the browse directory.
+      publish: false
       polkadot-app-deploy-version: "0.16.7"
     secrets:
       mnemonic: ${{ secrets.DOTNS_MNEMONIC }}
